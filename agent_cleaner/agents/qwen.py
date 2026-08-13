@@ -50,6 +50,7 @@ class QwenAgent(Agent):
                             size=self.file_size(f),
                             modified=mtime,
                             is_dir=False,
+                            project=proj.name,
                         )
                     )
 

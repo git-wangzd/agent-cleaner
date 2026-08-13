@@ -33,7 +33,15 @@ from agent_cleaner.agents.opencode import OpenCodeAgent
 from agent_cleaner.agents.qwen import QwenAgent
 from agent_cleaner.agents.trae import TraeAgent
 from agent_cleaner.agents.windsurf import WindsurfAgent
-from agent_cleaner.cleaner import filter_by_days, merge_selected, preview
+from agent_cleaner.cleaner import (
+    filter_by_days,
+    filter_by_project,
+    filter_by_search,
+    merge_selected,
+    preview,
+    quick_clean_target,
+)
+from agent_cleaner.logs import get_logger
 from agent_cleaner.models import AgentReport, Session, human_size
 from agent_cleaner.scanner import scan_all, summary_line
 from agent_cleaner.trash import _parse_sqlite_path
@@ -123,6 +131,11 @@ class ClaudeScanTest(BasePatchTest):
         self.assertEqual(len(sessions), 2)
         self.assertTrue(any(not s.is_dir and "myproj" in s.name for s in sessions))
         self.assertTrue(any(s.is_dir and "otherproj" in s.name for s in sessions))
+        # project 字段：旧版=目录名，新版=项目名
+        old = next(s for s in sessions if not s.is_dir)
+        new = next(s for s in sessions if s.is_dir)
+        self.assertEqual(old.project, "myproj")
+        self.assertEqual(new.project, "otherproj")
 
 
 class CodexScanTest(BasePatchTest):
@@ -553,6 +566,80 @@ class ConfigTest(unittest.TestCase):
     def test_agent_root_default_when_no_override(self):
         agent = ClaudeAgent()
         self.assertEqual(agent.root, agent.home_dir() / ".claude")
+
+
+class ProjectSearchTest(unittest.TestCase):
+    """项目筛选 / 会话搜索 / 一键清理目标的纯函数逻辑。"""
+
+    def _sessions(self) -> list[Session]:
+        return [
+            Session(agent="opencode", name="登录修复", path="/a", size=1, modified=0, is_dir=False, project="casic"),
+            Session(agent="opencode", name="性能优化", path="/b", size=1, modified=0, is_dir=False, project="metric"),
+            Session(agent="opencode", name="缓存", path="/c", size=1, modified=0, is_dir=True, kind="aux", project=""),
+        ]
+
+    def test_filter_by_project(self):
+        s = self._sessions()
+        self.assertEqual(len(filter_by_project(s, "全部项目")), 3)
+        self.assertEqual(len(filter_by_project(s, "")), 3)
+        self.assertIs(filter_by_project(s, None), s)
+        self.assertEqual([x.name for x in filter_by_project(s, "casic")], ["登录修复"])
+
+    def test_filter_by_search(self):
+        s = self._sessions()
+        self.assertEqual([x.name for x in filter_by_search(s, "登录")], ["登录修复"])
+        self.assertEqual([x.name for x in filter_by_search(s, "METRIC")], ["性能优化"])  # 项目名，大小写不敏感
+        self.assertEqual(len(filter_by_search(s, " ")), 3)  # 空白关键词不过滤
+
+    def test_quick_clean_target_excludes_aux(self):
+        import time
+
+        now = time.time()
+        day = 86400
+        reports = [
+            AgentReport(
+                agent="x",
+                display="X",
+                storage_path="~",
+                sessions=[
+                    Session(agent="x", name="old", path="/o", size=1, modified=now - 30 * day, is_dir=False),
+                    Session(agent="x", name="new", path="/n", size=1, modified=now - 1 * day, is_dir=False),
+                    Session(agent="x", name="old-aux", path="/c", size=1, modified=now - 30 * day, is_dir=True, kind="aux"),
+                ],
+            )
+        ]
+        target = quick_clean_target(reports, 7)
+        self.assertEqual([s.name for s in target], ["old"])  # 只含旧会话，不含附属数据
+
+
+class LoggerTest(unittest.TestCase):
+    """错误日志：写入 <配置目录>/logs/cleaner.log。"""
+
+    def test_writes_log_file(self):
+        import tempfile
+
+        tmp = Path(tempfile.mkdtemp(prefix="log_test_"))
+        old_appdata = os.environ.get("APPDATA")
+        os.environ["APPDATA"] = str(tmp)
+        try:
+            from agent_cleaner import logs
+
+            logs._logger = None  # 重置单例，指向新的配置目录
+            logger = get_logger()
+            logger.warning("测试日志 %s", "内容")
+            for h in logger.handlers:
+                h.flush()
+
+            log_file = tmp / "agent-cleaner" / "logs" / "cleaner.log"
+            self.assertTrue(log_file.exists())
+            self.assertIn("测试日志 内容", log_file.read_text(encoding="utf-8"))
+        finally:
+            logs._logger = None
+            if old_appdata is None:
+                os.environ.pop("APPDATA", None)
+            else:
+                os.environ["APPDATA"] = old_appdata
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 class FilterByDaysTest(unittest.TestCase):

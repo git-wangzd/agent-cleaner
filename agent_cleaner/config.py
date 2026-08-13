@@ -55,3 +55,18 @@ def set_agent_path(agent_id: str, path: str | None) -> None:
 def get_agent_path(agent_id: str) -> str | None:
     """读取某个 Agent 的自定义数据路径（无覆盖返回 None）。"""
     return load_config().get("agent_paths", {}).get(agent_id)
+
+
+def get_big_file_mb() -> int:
+    """大文件标红阈值（MB），默认 10。"""
+    try:
+        return int(load_config().get("big_file_mb", 10))
+    except (TypeError, ValueError):
+        return 10
+
+
+def set_big_file_mb(mb: int) -> None:
+    """设置大文件标红阈值（MB）。"""
+    cfg = load_config()
+    cfg["big_file_mb"] = int(mb)
+    save_config(cfg)

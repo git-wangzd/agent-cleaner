@@ -21,6 +21,7 @@ class Session:
     modified: float   # 最后修改时间戳（epoch 秒）
     is_dir: bool      # True=整个目录，False=单个文件
     kind: str = "session"  # "session" 或 "aux"
+    project: str = ""  # 所属项目名（无项目概念的 Agent 为空字符串）
 
     def size_human(self) -> str:
         """把字节数格式化成可读字符串，如 1.5 MB。"""

@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 from .models import AgentReport, Session, human_size
 from .trash import delete_sessions
+from .logs import get_logger
 
 
 def filter_by_days(sessions: list[Session], days: int | None) -> list[Session]:
@@ -23,6 +24,29 @@ def filter_by_days(sessions: list[Session], days: int | None) -> list[Session]:
         return sessions
     cutoff = time.time() - days * 86400
     return [s for s in sessions if not s.modified or s.modified < cutoff]
+
+
+def filter_by_project(sessions: list[Session], project: str | None) -> list[Session]:
+    """按项目过滤会话；project 为空或"全部项目"时不过滤。"""
+    if not project or project == "全部项目":
+        return sessions
+    return [s for s in sessions if s.project == project]
+
+
+def filter_by_search(sessions: list[Session], keyword: str) -> list[Session]:
+    """按关键词过滤会话（匹配名称或项目，不区分大小写）；关键词为空不过滤。"""
+    kw = (keyword or "").strip().lower()
+    if not kw:
+        return sessions
+    return [s for s in sessions if kw in s.name.lower() or kw in s.project.lower()]
+
+
+def quick_clean_target(reports: list[AgentReport], days: int) -> list[Session]:
+    """一键清理的目标：所有 Agent 中超过 days 天未活动的会话（不含附属数据）。"""
+    target: list[Session] = []
+    for r in reports:
+        target += [s for s in filter_by_days(r.sessions, days) if s.kind != "aux"]
+    return target
 
 
 def merge_selected(
@@ -90,4 +114,8 @@ def clean(sessions: list[Session], permanent: bool = False, progress=None) -> Cl
     if not sessions:
         return CleanResult(permanent=permanent)
     ok, failed = delete_sessions(sessions, permanent=permanent, progress=progress)
+    if failed:
+        get_logger().warning("批量清理失败 %d/%d 个", len(failed), len(sessions))
+        for msg in failed:
+            get_logger().warning("  %s", msg)
     return CleanResult(permanent=permanent, ok=ok, failed=failed)

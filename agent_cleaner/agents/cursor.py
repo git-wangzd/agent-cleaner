@@ -85,6 +85,7 @@ class CursorAgent(Agent):
                         size=size,
                         modified=ws.stat().st_mtime,
                         is_dir=True,
+                        project=ws.name,
                     )
                 )
 
@@ -137,6 +138,7 @@ class CursorAgent(Agent):
                             size=self.file_size(f),
                             modified=mtime,
                             is_dir=False,
+                            project=proj.name,
                         )
                     )
         return out

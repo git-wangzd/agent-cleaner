@@ -55,6 +55,7 @@ class LingmaAgent(Agent):
                         size=size,
                         modified=mtime,
                         is_dir=True,
+                        project=proj.name.rsplit("_", 1)[0] if "_" in proj.name else proj.name,
                     )
                 )
 

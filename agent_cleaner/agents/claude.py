@@ -46,6 +46,7 @@ class ClaudeAgent(Agent):
                             size=self.file_size(f),
                             modified=f.stat().st_mtime,
                             is_dir=False,
+                            project=proj_dir.name,
                         )
                     )
 
@@ -64,6 +65,7 @@ class ClaudeAgent(Agent):
                         size=size,
                         modified=mtime,
                         is_dir=True,
+                        project=proj_dir.name,
                     )
                 )
 

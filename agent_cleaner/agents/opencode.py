@@ -116,6 +116,7 @@ class OpenCodeAgent(Agent):
                         size=size,
                         modified=float(ts),
                         is_dir=False,
+                        project=proj_name or "",
                     )
                 )
         finally:
@@ -148,6 +149,7 @@ class OpenCodeAgent(Agent):
                         size=total,
                         modified=mtime,
                         is_dir=False,
+                        project=proj_dir.name,
                     )
                 )
         return out

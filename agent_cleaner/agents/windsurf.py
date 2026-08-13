@@ -50,6 +50,7 @@ class WindsurfAgent(Agent):
                     size=size,
                     modified=ws.stat().st_mtime,
                     is_dir=True,
+                    project=ws.name,
                 )
             )
 

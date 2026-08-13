@@ -15,8 +15,18 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .cleaner import CleanResult, clean, filter_by_days, merge_selected, preview
+from .cleaner import (
+    CleanResult,
+    clean,
+    filter_by_days,
+    filter_by_project,
+    filter_by_search,
+    merge_selected,
+    preview,
+    quick_clean_target,
+)
 from . import config
+from .logs import get_logger
 from .models import AgentReport, Session, human_size
 from .registry import all_agents
 from .scanner import scan_all, summary_line
@@ -26,6 +36,8 @@ CHECK = "✅"        # 已勾选（大号符号，比 ☑ 更醒目）
 UNCHECK = "⬜"      # 未勾选（大号方框，比 ☐ 更醒目）
 CHECKED_TAG = "checked"          # 勾选行的 tag（背景高亮）
 CHECKED_BG = "#e6f4ea"           # 勾选行背景色（浅绿）
+BIG_TAG = "big"                  # 大文件行 tag（红色前景）
+BIG_FG = "#cc0000"               # 大文件行文字色
 
 
 class App(tk.Tk):
@@ -41,6 +53,8 @@ class App(tk.Tk):
         self.checked_agents: set[str] = set()    # 已勾选"清理整个 Agent"的 id 集合
         self.control_buttons: list[ttk.Button] = []  # 清理期间需要禁用的按钮
         self.filter_days: int | None = None      # 时间筛选：None=全部，N=只显示 N 天前的旧会话
+        self.project_filter = "全部项目"          # 项目筛选：当前 Agent 的项目名
+        self.search_text = ""                    # 会话搜索关键词
 
         self._build_ui()
         self.after(200, self.do_scan)  # 启动后自动扫描一次
@@ -70,6 +84,9 @@ class App(tk.Tk):
             "按会话最后活动时间筛选，只看 N 天前没用过的旧会话\n（例如选\"30 天\"= 只列出 30 天前没动过的，最近的会话被隐藏）\nAgent 表的会话数与总大小会同步变化",
         )
         ttk.Button(top, text="设置", command=self._open_settings).pack(side="left", padx=(12, 0))
+        b_quick = ttk.Button(top, text="一键清理", command=self._quick_clean)
+        b_quick.pack(side="left", padx=(6, 0))
+        self.control_buttons.append(b_quick)
 
         # 上下分割
         paned = ttk.PanedWindow(self, orient="vertical")
@@ -113,6 +130,16 @@ class App(tk.Tk):
         b4 = ttk.Button(sess_bar, text="清空", command=self._check_none_sessions)
         b4.pack(side="left", padx=(4, 0))
         self.control_buttons += [b3, b4]
+        # 项目筛选
+        ttk.Label(sess_bar, text="项目:").pack(side="left", padx=(12, 2))
+        self.cmb_project = ttk.Combobox(sess_bar, state="readonly", width=18)
+        self.cmb_project.pack(side="left")
+        self.cmb_project.bind("<<ComboboxSelected>>", self._on_project_change)
+        # 会话搜索（按名称/项目即输即滤）
+        ttk.Label(sess_bar, text="搜索:").pack(side="left", padx=(12, 2))
+        self.ent_search = ttk.Entry(sess_bar, width=16)
+        self.ent_search.pack(side="left")
+        self.ent_search.bind("<KeyRelease>", self._on_search_change)
         cols2 = ("check", "kind", "name", "size", "modified")
         self.tree_sessions = ttk.Treeview(sess_frame, columns=cols2, show="headings")
         for cid, w, txt in (("check", 34, ""), ("kind", 52, "类型"), ("name", 370, "会话"), ("size", 100, "大小"), ("modified", 150, "最后活动")):
@@ -120,6 +147,7 @@ class App(tk.Tk):
             self.tree_sessions.heading(cid, text=txt, anchor=align)
             self.tree_sessions.column(cid, width=w, anchor=align)
         self.tree_sessions.tag_configure(CHECKED_TAG, background=CHECKED_BG)
+        self.tree_sessions.tag_configure(BIG_TAG, foreground=BIG_FG)
         sb2 = ttk.Scrollbar(sess_frame, command=self.tree_sessions.yview)
         self.tree_sessions.configure(yscrollcommand=sb2.set)
         self.tree_sessions.pack(side="left", fill="both", expand=True)
@@ -155,6 +183,7 @@ class App(tk.Tk):
         try:
             self.reports = scan_all()
         except Exception as e:  # 扫描失败不应崩溃
+            get_logger().error("扫描出错: %s", e)
             self.lbl_status.config(text=f"扫描出错: {e}")
             self.btn_scan.state(["!disabled"])
             return
@@ -206,11 +235,19 @@ class App(tk.Tk):
         self.tree_sessions.delete(*self.tree_sessions.get_children())
         report = next((r for r in self.reports if r.agent == agent_id), None)
         self.sessions = self._filter_sessions(report.sessions) if report else []
-        # 会话在前、附属数据在后（附属默认不勾选）
-        for s in sorted(self.sessions, key=lambda x: x.kind == "aux"):
+        self._refresh_project_options()
+        self.sessions = self._filter_by_project(self.sessions)
+        self.sessions = self._filter_by_search(self.sessions)
+        # 会话在前、附属数据在后，组内按大小降序（大文件优先）；超阈值标红
+        big_threshold = config.get_big_file_mb() * 1024 * 1024
+        for s in sorted(self.sessions, key=lambda x: (x.kind == "aux", -x.size)):
             checked = s.path in self.checked_paths
             mark = CHECK if checked else UNCHECK
-            tags = (CHECKED_TAG,) if checked else ()
+            is_big = s.size >= big_threshold
+            if checked:
+                tags = (CHECKED_TAG, BIG_TAG) if is_big else (CHECKED_TAG,)
+            else:
+                tags = (BIG_TAG,) if is_big else ()
             kind_label = "附属" if s.kind == "aux" else "会话"
             self.tree_sessions.insert("", "end", iid=s.path, values=(mark, kind_label, s.name, s.size_human(), s.modified_human()), tags=tags)
 
@@ -346,6 +383,13 @@ class App(tk.Tk):
             foreground="#666666",
         ).pack(padx=12, pady=(0, 6), anchor="w")
 
+        # 大文件标红阈值（MB）
+        thr_row = ttk.Frame(win)
+        thr_row.pack(fill="x", padx=12, pady=(0, 6))
+        ttk.Label(thr_row, text="大文件标红阈值 (MB):").pack(side="left")
+        thr_var = tk.StringVar(value=str(config.get_big_file_mb()))
+        ttk.Entry(thr_row, textvariable=thr_var, width=8).pack(side="left", padx=(4, 0))
+
         # 滚动区（Agent 数量多时窗口放不下）
         canvas = tk.Canvas(win, highlightthickness=0)
         sb = ttk.Scrollbar(win, orient="vertical", command=canvas.yview)
@@ -402,15 +446,56 @@ class App(tk.Tk):
             ).pack(side="left")
 
         def on_close() -> None:
-            """关闭：手打的路径落盘 + 重新扫描。"""
+            """关闭：手打的路径落盘 + 阈值保存 + 重新扫描。"""
             for aid, var in entries.items():
                 val = var.get().strip()
                 config.set_agent_path(aid, val or None)
+            try:
+                config.set_big_file_mb(int(thr_var.get().strip() or 10))
+            except ValueError:
+                pass
             win.destroy()
             self.do_scan()
 
         # 修改即时保存：点右上角 X 关闭时落盘手打路径并重新扫描
         win.protocol("WM_DELETE_WINDOW", on_close)
+
+    # ---------- 项目筛选 ----------
+
+    def _refresh_project_options(self) -> None:
+        """根据当前 Agent 的会话刷新项目下拉选项，保持或回退当前选择。"""
+        projects = sorted({s.project for s in self.sessions if s.project})
+        values = ["全部项目"] + projects
+        self.cmb_project.configure(values=values)
+        if self.project_filter not in values:
+            self.project_filter = "全部项目"
+        self.cmb_project.set(self.project_filter)
+
+    def _filter_by_project(self, sessions: list[Session]) -> list[Session]:
+        """按项目过滤（"全部项目"不过滤）。"""
+        return filter_by_project(sessions, self.project_filter)
+
+    def _on_project_change(self, _event=None) -> None:
+        """项目下拉变化：重新显示当前 Agent 的会话（叠加项目过滤）。"""
+        self.project_filter = self.cmb_project.get()
+        sel = self.tree_agents.selection()
+        if sel:
+            self._show_sessions(sel[0])
+        self._update_status()
+
+    # ---------- 搜索 ----------
+
+    def _filter_by_search(self, sessions: list[Session]) -> list[Session]:
+        """按关键词过滤会话（匹配名称或项目，不区分大小写）。"""
+        return filter_by_search(sessions, self.search_text)
+
+    def _on_search_change(self, _event=None) -> None:
+        """搜索框输入变化：实时过滤当前会话列表。"""
+        self.search_text = self.ent_search.get()
+        sel = self.tree_agents.selection()
+        if sel:
+            self._show_sessions(sel[0])
+        self._update_status()
 
     # ---------- 右键菜单 ----------
 
@@ -488,17 +573,42 @@ class App(tk.Tk):
             if not ok:
                 return
 
-        # 后台线程执行清理，避免界面卡死；进度经 after() 回主线程更新
+        self._run_clean(selected, permanent)
+
+    def _quick_clean(self) -> None:
+        """一键清理：按顶部时间筛选的天数，清理所有 Agent 中更早的旧会话（不含附属数据）。"""
+        days = self._filter_days()
+        if not days:
+            messagebox.showinfo("提示", "请先在顶部选择时间（如 90 天）——一键清理会清掉更早的旧会话。")
+            return
+        target = quick_clean_target(self.reports, days)
+        if not target:
+            messagebox.showinfo("提示", f"没有超过 {days} 天未活动的旧会话。")
+            return
+        total = sum(s.size for s in target)
+        names = "\n".join(f"  - {s.name}" for s in target[:8])
+        more = f"\n  … 共 {len(target)} 个" if len(target) > 8 else ""
+        ok = messagebox.askyesno(
+            "一键清理确认",
+            f"将清理所有 Agent 中超过 {days} 天未活动的 {len(target)} 个旧会话（共 {human_size(total)}），\n"
+            f"移入回收站（可恢复）：\n\n{names}{more}",
+        )
+        if not ok:
+            return
+        self._run_clean(target, permanent=False)
+
+    def _run_clean(self, sessions: list[Session], permanent: bool) -> None:
+        """后台线程执行清理（进度条 + 按钮禁用 + 异常兜底），供勾选清理与一键清理复用。"""
         self._set_busy(True)
-        self.progress.configure(maximum=len(selected), value=0)
-        self.lbl_status.config(text=f"正在清理 0/{len(selected)} …")
+        self.progress.configure(maximum=len(sessions), value=0)
+        self.lbl_status.config(text=f"正在清理 0/{len(sessions)} …")
 
         def worker() -> None:
             try:
                 def on_progress(done: int, total: int, name: str) -> None:
                     self.after(0, lambda: self._on_progress(done, total, name))
 
-                result = clean(selected, permanent=permanent, progress=on_progress)
+                result = clean(sessions, permanent=permanent, progress=on_progress)
                 self.after(0, lambda: self._on_clean_done(result))
             except Exception as e:  # 兜底：任何未预期异常都弹窗提示并恢复界面
                 self.after(0, lambda: self._on_clean_error(e))
@@ -515,6 +625,7 @@ class App(tk.Tk):
 
     def _on_clean_error(self, exc: Exception) -> None:
         """清理线程抛出未预期异常时的兜底处理（主线程）。"""
+        get_logger().error("清理线程异常: %s", exc)
         self._set_busy(False)
         self.progress.configure(value=0)
         self.lbl_status.config(text=f"清理出错: {exc}")
