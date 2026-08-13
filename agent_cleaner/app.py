@@ -17,7 +17,6 @@ from tkinter import filedialog, messagebox, ttk
 
 from .cleaner import (
     CleanResult,
-    backup_sessions,
     clean,
     filter_by_days,
     filter_by_project,
@@ -414,13 +413,6 @@ class App(tk.Tk):
         thr_var = tk.StringVar(value=str(config.get_big_file_mb()))
         ttk.Entry(thr_row, textvariable=thr_var, width=8).pack(side="left", padx=(4, 0))
 
-        # 永久删除前的自动备份目录（留空 = 不启用备份）
-        bk_row = ttk.Frame(win)
-        bk_row.pack(fill="x", padx=12, pady=(0, 6))
-        ttk.Label(bk_row, text="永久删除前备份目录:").pack(side="left")
-        bk_var = tk.StringVar(value=config.get_backup_dir())
-        ttk.Entry(bk_row, textvariable=bk_var).pack(side="left", fill="x", expand=True, padx=(4, 0))
-
         # 更新检查仓库（owner/repo；留空 = 不检查更新）
         up_row = ttk.Frame(win)
         up_row.pack(fill="x", padx=12, pady=(0, 6))
@@ -492,7 +484,6 @@ class App(tk.Tk):
                 config.set_big_file_mb(int(thr_var.get().strip() or 10))
             except ValueError:
                 pass
-            config.set_backup_dir(bk_var.get().strip())
             config.set_update_repo(up_var.get().strip())
             win.destroy()
             self.do_scan()
@@ -639,38 +630,21 @@ class App(tk.Tk):
 
     def _run_clean(self, sessions: list[Session], permanent: bool) -> None:
         """后台线程执行清理（进度条 + 按钮禁用 + 异常兜底），供勾选清理与一键清理复用。"""
-        # 仅永久删除且配置了备份目录时启用自动备份
-        backup_dir = config.get_backup_dir() if permanent else ""
         self._set_busy(True)
         self.progress.configure(maximum=len(sessions), value=0)
-        self.lbl_status.config(text="正在备份并清理…" if backup_dir else f"正在清理 0/{len(sessions)} …")
+        self.lbl_status.config(text=f"正在清理 0/{len(sessions)} …")
 
         def worker() -> None:
             try:
                 def on_progress(done: int, total: int, name: str) -> None:
                     self.after(0, lambda: self._on_progress(done, total, name))
 
-                if backup_dir:
-                    self.after(0, lambda: self.lbl_status.config(text=f"正在备份到 {backup_dir} …"))
-                    try:
-                        backup_sessions(sessions, backup_dir)
-                    except Exception as e:  # 备份失败：中止删除（备份的意义就是兜底）
-                        self.after(0, lambda: self._on_backup_failed(e))
-                        return
                 result = clean(sessions, permanent=permanent, progress=on_progress)
                 self.after(0, lambda: self._on_clean_done(result))
             except Exception as e:  # 兜底：任何未预期异常都弹窗提示并恢复界面
                 self.after(0, lambda: self._on_clean_error(e))
 
         threading.Thread(target=worker, daemon=True).start()
-
-    def _on_backup_failed(self, exc: Exception) -> None:
-        """备份失败：中止删除并明确提示。"""
-        get_logger().error("永久删除前备份失败: %s", exc)
-        self._set_busy(False)
-        self.progress.configure(value=0)
-        self.lbl_status.config(text="备份失败，未删除任何内容")
-        messagebox.showerror("备份失败", f"永久删除前备份失败，已中止删除（未删除任何内容）：\n\n{exc}")
 
     # ---------- 清理进度 ----------
 

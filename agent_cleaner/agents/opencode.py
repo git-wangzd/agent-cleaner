@@ -103,9 +103,11 @@ class OpenCodeAgent(Agent):
                 ts = updated or 0
                 if ts > 1e12:  # 毫秒转秒
                     ts /= 1000.0
+                # project.name 在 opencode 中常为 NULL，回退用 session.directory 的目录名
+                project = proj_name or (Path(directory).name if directory else "")
                 label = title or slug or sid[:8]
-                if proj_name:
-                    label = f"{proj_name}: {label}"
+                if project:
+                    label = f"{project}: {label}"
                 if directory:
                     label = f"{label} · {Path(directory).name}"
                 out.append(
@@ -116,7 +118,7 @@ class OpenCodeAgent(Agent):
                         size=size,
                         modified=float(ts),
                         is_dir=False,
-                        project=proj_name or "",
+                        project=project,
                     )
                 )
         finally:

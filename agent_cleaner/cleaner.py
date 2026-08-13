@@ -6,10 +6,7 @@ GUI / CLI 只调用本模块的接口，不直接操作文件系统。
 from __future__ import annotations
 
 import time
-import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime
-from pathlib import Path
 
 from .models import AgentReport, Session, human_size
 from .trash import delete_sessions
@@ -50,48 +47,6 @@ def quick_clean_target(reports: list[AgentReport], days: int) -> list[Session]:
     for r in reports:
         target += [s for s in filter_by_days(r.sessions, days) if s.kind != "aux"]
     return target
-
-
-def backup_sessions(sessions: list[Session], backup_dir: str) -> str:
-    """把会话打包成 zip（含清单），返回 zip 路径。
-
-    - 文件/目录会话：复制进 zip（目录递归）
-    - OpenCode 新版（sqlite://）会话在数据库里，无法单独打包，在清单中标注跳过
-    - 备份失败（如目录不可写）抛 OSError，由调用方决定中止删除
-    """
-    out_dir = Path(backup_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    zip_path = out_dir / f"agent-cleaner-backup-{stamp}.zip"
-
-    manifest: list[str] = ["Agent 会话备份清单", f"时间: {datetime.now().isoformat()}", ""]
-    skipped: list[str] = []
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for s in sessions:
-            if s.path.startswith("sqlite://"):
-                skipped.append(f"{s.name} | {s.path} | 跳过：数据库内会话，无法单独备份")
-                continue
-            p = Path(s.path)
-            if not p.exists():
-                manifest.append(f"缺失: {s.name} | {s.path}")
-                continue
-            base = s.name.replace("/", "_").replace("\\", "_")[:60] or "session"
-            if s.is_dir:
-                for f in sorted(p.rglob("*")):
-                    if f.is_file():
-                        try:
-                            zf.write(f, f"{base}/{f.relative_to(p)}")
-                        except OSError:
-                            continue
-            else:
-                zf.write(p, f"{base}{p.suffix}")
-            manifest.append(f"已备份: {s.name} | {s.path} | {s.size_human()}")
-
-        manifest.append("")
-        manifest.append("跳过的会话（数据库内，无法单独备份）:")
-        manifest += skipped or ["（无）"]
-        zf.writestr("manifest.txt", "\n".join(manifest))
-    return str(zip_path)
 
 
 def merge_selected(

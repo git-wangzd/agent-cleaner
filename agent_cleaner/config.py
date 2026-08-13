@@ -72,21 +72,6 @@ def set_big_file_mb(mb: int) -> None:
     save_config(cfg)
 
 
-def get_backup_dir() -> str:
-    """永久删除前的自动备份目录；空字符串 = 不启用备份。"""
-    return load_config().get("backup_dir", "")
-
-
-def set_backup_dir(path: str) -> None:
-    """设置备份目录；空字符串表示关闭自动备份。"""
-    cfg = load_config()
-    if path:
-        cfg["backup_dir"] = path
-    else:
-        cfg.pop("backup_dir", None)
-    save_config(cfg)
-
-
 def get_update_repo() -> str:
     """版本检查的 GitHub 仓库（owner/repo）；空 = 不检查。"""
     return load_config().get("update_repo", "")
