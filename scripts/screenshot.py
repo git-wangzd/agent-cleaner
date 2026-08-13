@@ -33,12 +33,20 @@ def main() -> None:
     app.update()
     app.update_idletasks()
 
+    # 置顶并聚焦，避免截图被其他窗口遮挡（确保截到的是工具自身）
+    app.lift()
+    app.attributes("-topmost", True)
+    app.focus_force()
+    app.update()
+    time.sleep(0.6)  # 等窗口置顶渲染完成
+
     # 计算主窗口的屏幕坐标并截取
     x = app.winfo_rootx()
     y = app.winfo_rooty()
     w = app.winfo_width()
     h = app.winfo_height()
     img = ImageGrab.grab(bbox=(x, y, x + w, y + h))
+    app.attributes("-topmost", False)  # 取消置顶
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     img.save(OUT)
