@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from ..models import Session
@@ -19,9 +18,10 @@ class CodexAgent(Agent):
     id = "codex"
     display = "Codex CLI"
     storage_hint = "~/.codex/sessions (CODEX_HOME 可覆盖)"
+    env_var = "CODEX_HOME"  # 官方支持
 
     def __init__(self) -> None:
-        home = self.resolve_root(Path(os.environ.get("CODEX_HOME") or (self.home_dir() / ".codex")))
+        home = self.resolve_root(self.home_dir() / ".codex")
         self.root = home
         self.sessions_dir = home / "sessions"
         self.archived_dir = home / "archived_sessions"

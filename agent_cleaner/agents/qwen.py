@@ -18,6 +18,7 @@ class QwenAgent(Agent):
     id = "qwen"
     display = "Qwen Code"
     storage_hint = "~/.qwen/projects/<项目>/chats"
+    env_var = "QWEN_HOME"  # 官方支持（QWENLM/qwen-code PR #2953）：整体移动 ~/.qwen
 
     def __init__(self) -> None:
         self.root = self.resolve_root(self.home_dir() / ".qwen")

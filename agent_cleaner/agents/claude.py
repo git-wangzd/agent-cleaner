@@ -18,6 +18,7 @@ class ClaudeAgent(Agent):
     id = "claude"
     display = "Claude Code"
     storage_hint = "~/.claude/projects 与 ~/.claude/sessions"
+    env_var = "CLAUDE_CONFIG_DIR"  # 官方支持：改配置/会话数据目录
 
     def __init__(self) -> None:
         self.root = self.resolve_root(self.home_dir() / ".claude")

@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from ..models import Session
@@ -20,9 +19,10 @@ class ContinueAgent(Agent):
     id = "continue"
     display = "Continue"
     storage_hint = "~/.continue/sessions"
+    env_var = "CONTINUE_GLOBAL_DIR"  # 官方支持
 
     def __init__(self) -> None:
-        home = self.resolve_root(Path(os.environ.get("CONTINUE_GLOBAL_DIR") or (self.home_dir() / ".continue")))
+        home = self.resolve_root(self.home_dir() / ".continue")
         self.sessions_dir = home / "sessions"
 
     def detect(self) -> bool:

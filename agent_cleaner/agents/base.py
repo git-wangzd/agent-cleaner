@@ -29,6 +29,7 @@ class Agent:
     id = "agent"
     display = "Agent"
     storage_hint = ""  # 存储位置的说明文字（界面展示用）
+    env_var: str | None = None  # Agent 官方支持的数据目录环境变量（如 CLAUDE_CONFIG_DIR）
 
     # ---- 跨平台路径工具 ----
 
@@ -47,7 +48,10 @@ class Agent:
 
     @staticmethod
     def local_share_dir() -> Path:
-        """~/.local/share（Linux/macOS 惯例，Windows 下也有 opencode 使用）。"""
+        """数据目录：遵循 XDG_DATA_HOME（opencode 等使用），未设置时回退 ~/.local/share。"""
+        xdg = os.environ.get("XDG_DATA_HOME")
+        if xdg:
+            return Path(xdg)
         return Agent.home_dir() / ".local" / "share"
 
     @staticmethod
@@ -77,9 +81,15 @@ class Agent:
             return None
 
     def resolve_root(self, default: Path) -> Path:
-        """返回数据根目录：优先用户配置覆盖，其次默认路径。"""
+        """返回数据根目录，优先级：用户配置覆盖 > Agent 官方环境变量 > 默认路径。"""
         override = self.config_override()
-        return override if override else default
+        if override:
+            return override
+        if self.env_var:
+            env_val = os.environ.get(self.env_var)
+            if env_val:
+                return Path(env_val)
+        return default
 
     def detect(self) -> bool:
         """存储根目录是否存在（快速探测）。"""

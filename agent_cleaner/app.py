@@ -15,9 +15,11 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .cleaner import CleanResult, clean, filter_by_days, merge_selected, preview
+from . import config
 from .models import AgentReport, Session, human_size
+from .registry import all_agents
 from .scanner import scan_all, summary_line
-from .utils import open_in_file_manager, reveal_target
+from .utils import ToolTip, open_in_file_manager, reveal_target
 
 CHECK = "✅"        # 已勾选（大号符号，比 ☑ 更醒目）
 UNCHECK = "⬜"      # 未勾选（大号方框，比 ☐ 更醒目）
@@ -56,12 +58,17 @@ class App(tk.Tk):
         self.btn_scan.pack(side="left")
         self.lbl_summary = ttk.Label(top, text="正在扫描…")
         self.lbl_summary.pack(side="left", padx=12)
-        # 时间筛选：只显示超过 N 天没有活动的旧会话（默认全部）
-        ttk.Label(top, text="只显示超过:").pack(side="left", padx=(12, 2))
+        # 时间筛选：只显示 N 天前未活动的旧会话（默认全部）
+        ttk.Label(top, text="只显示未活动超过:").pack(side="left", padx=(12, 2))
         self.cmb_filter = ttk.Combobox(top, values=["全部", "7 天", "30 天", "90 天"], state="readonly", width=8)
         self.cmb_filter.set("全部")
         self.cmb_filter.pack(side="left")
         self.cmb_filter.bind("<<ComboboxSelected>>", self._on_filter_change)
+        ToolTip(
+            self.cmb_filter,
+            "按会话最后活动时间筛选，只看 N 天前没用过的旧会话\n（例如选\"30 天\"= 只列出 30 天前没动过的，最近的会话被隐藏）\nAgent 表的会话数与总大小会同步变化",
+        )
+        ttk.Button(top, text="设置", command=self._open_settings).pack(side="left", padx=(12, 0))
 
         # 上下分割
         paned = ttk.PanedWindow(self, orient="vertical")
@@ -77,11 +84,11 @@ class App(tk.Tk):
         b2 = ttk.Button(top_bar, text="清空", command=self._check_none_agents)
         b2.pack(side="left", padx=(4, 0))
         self.control_buttons += [b1, b2]
-        cols = ("check", "agent", "count", "size", "storage")
+        cols = ("check", "agent", "sessions", "aux", "size", "storage")
         self.tree_agents = ttk.Treeview(top_frame, columns=cols, show="headings", height=5)
-        headers = (("check", 34, ""), ("agent", 155, "Agent"), ("count", 75, "会话数"), ("size", 105, "总大小"), ("storage", 405, "存储位置"))
+        headers = (("check", 34, ""), ("agent", 150, "Agent"), ("sessions", 55, "会话"), ("aux", 55, "附属"), ("size", 105, "总大小"), ("storage", 370, "存储位置"))
         for cid, w, txt in headers:
-            align = "center" if cid == "check" else "w"
+            align = "center" if cid in ("check", "sessions", "aux") else "w"
             self.tree_agents.heading(cid, text=txt, anchor=align)
             self.tree_agents.column(cid, width=w, anchor=align)
         self.tree_agents.tag_configure(CHECKED_TAG, background=CHECKED_BG)
@@ -162,11 +169,10 @@ class App(tk.Tk):
             mark = CHECK if checked else UNCHECK
             tags = (CHECKED_TAG,) if checked else ()
             shown = self._filter_sessions(r.sessions)
-            count = len(shown)
+            session_n = len([s for s in shown if s.kind != "aux"])
             aux_n = len([s for s in shown if s.kind == "aux"])
-            count_label = f"{count - aux_n} (+{aux_n})" if aux_n else str(count)
             size = sum(s.size for s in shown)
-            self.tree_agents.insert("", "end", iid=r.agent, values=(mark, r.display, count_label, human_size(size), r.storage_path), tags=tags)
+            self.tree_agents.insert("", "end", iid=r.agent, values=(mark, r.display, session_n, aux_n, human_size(size), r.storage_path), tags=tags)
         # 默认选中第一个有会话的 Agent
         first = next((r.agent for r in self.reports if r.sessions), None)
         if first:
@@ -319,6 +325,57 @@ class App(tk.Tk):
         ttk.Button(win, text="关闭", command=win.destroy).grid(
             row=len(rows), column=0, columnspan=2, pady=12
         )
+
+    # ---------- 设置对话框 ----------
+
+    def _open_settings(self) -> None:
+        """设置对话框：查看/编辑每个 Agent 的数据路径覆盖（写入 config.json）。"""
+        win = tk.Toplevel(self)
+        win.title("设置 - Agent 数据路径")
+        win.transient(self)
+        win.geometry("580x520")
+        ttk.Label(
+            win,
+            text="为每个 Agent 指定数据目录（留空 = 使用默认路径 / 环境变量路径）",
+        ).pack(padx=12, pady=(10, 6), anchor="w")
+        ttk.Label(
+            win,
+            text="说明：Agent 官方环境变量（如 CLAUDE_CONFIG_DIR、QWEN_HOME）会自动识别；\n"
+            "此处填写的是最高优先级的手动覆盖。",
+            foreground="#666666",
+        ).pack(padx=12, pady=(0, 6), anchor="w")
+
+        # 滚动区（Agent 数量多时窗口放不下）
+        canvas = tk.Canvas(win, highlightthickness=0)
+        sb = ttk.Scrollbar(win, orient="vertical", command=canvas.yview)
+        frame = ttk.Frame(canvas)
+        frame.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=frame, anchor="nw")
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.pack(side="left", fill="both", expand=True, padx=(12, 0))
+        sb.pack(side="right", fill="y")
+
+        entries: dict[str, tk.StringVar] = {}
+        for agent in all_agents():
+            row = ttk.Frame(frame)
+            row.pack(fill="x", padx=6, pady=3)
+            ttk.Label(row, text=f"{agent.display} ({agent.id})", width=24).pack(side="left")
+            var = tk.StringVar(value=config.get_agent_path(agent.id) or "")
+            entries[agent.id] = var
+            ttk.Entry(row, textvariable=var).pack(side="left", fill="x", expand=True)
+
+        def save() -> None:
+            for aid, var in entries.items():
+                val = var.get().strip()
+                config.set_agent_path(aid, val or None)
+            win.destroy()
+            self.do_scan()
+            messagebox.showinfo("已保存", "路径配置已保存，已重新扫描。")
+
+        bar = ttk.Frame(win)
+        bar.pack(fill="x", padx=12, pady=10)
+        ttk.Button(bar, text="保存并重新扫描", command=save).pack(side="left")
+        ttk.Button(bar, text="关闭", command=win.destroy).pack(side="left", padx=6)
 
     # ---------- 右键菜单 ----------
 

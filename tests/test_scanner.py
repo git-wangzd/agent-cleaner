@@ -432,6 +432,63 @@ class RegistryTest(unittest.TestCase):
         self.assertIn("marscode", ids)
 
 
+class EnvVarTest(unittest.TestCase):
+    """Agent 官方环境变量支持（环境变量 > 默认路径；config 覆盖最高）。"""
+
+    def setUp(self):
+        import tempfile
+
+        self._tmp = Path(tempfile.mkdtemp(prefix="envvar_test_"))
+        self._saved = {
+            k: os.environ.get(k)
+            for k in ("APPDATA", "CLAUDE_CONFIG_DIR", "QWEN_HOME", "XDG_DATA_HOME")
+        }
+        os.environ["APPDATA"] = str(self._tmp / "appdata")  # 隔离 config.json
+
+    def tearDown(self):
+        import shutil
+
+        for k, v in self._saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def test_claude_env_var(self):
+        from agent_cleaner import config
+
+        os.environ["CLAUDE_CONFIG_DIR"] = str(self._tmp / "claude-data")
+        agent = ClaudeAgent()
+        self.assertEqual(str(agent.root), os.environ["CLAUDE_CONFIG_DIR"])
+
+    def test_qwen_env_var(self):
+        os.environ["QWEN_HOME"] = str(self._tmp / "qwen-data")
+        agent = QwenAgent()
+        self.assertEqual(str(agent.root), os.environ["QWEN_HOME"])
+
+    def test_config_override_beats_env(self):
+        from agent_cleaner import config
+
+        custom = str(self._tmp / "custom")
+        config.set_agent_path("claude", custom)
+        os.environ["CLAUDE_CONFIG_DIR"] = str(self._tmp / "env")
+        agent = ClaudeAgent()
+        self.assertEqual(str(agent.root), custom)
+        config.set_agent_path("claude", None)
+
+    def test_xdg_data_home(self):
+        from agent_cleaner.agents.base import Agent
+
+        os.environ["XDG_DATA_HOME"] = str(self._tmp / "xdg-data")
+        self.assertEqual(str(Agent.local_share_dir()), os.environ["XDG_DATA_HOME"])
+
+    def test_default_when_no_env(self):
+        os.environ.pop("CLAUDE_CONFIG_DIR", None)
+        agent = ClaudeAgent()
+        self.assertEqual(agent.root, agent.home_dir() / ".claude")
+
+
 class ConfigTest(unittest.TestCase):
     """配置模块：读写与 Agent 路径覆盖。"""
 

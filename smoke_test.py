@@ -62,6 +62,13 @@ def main() -> None:
     for w in list(app.winfo_children()):
         w.destroy()
 
+    # 设置对话框：验证打开不抛异常
+    app._open_settings()
+    print("== 设置对话框 ==")
+    print("设置对话框打开成功（已销毁）")
+    for w in list(app.winfo_children()):
+        w.destroy()
+
     app.destroy()
 
 
