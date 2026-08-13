@@ -22,6 +22,10 @@ jobs:
       - name: 单元测试（失败则不出包）
         run: python -m unittest discover -s tests
 
+      - name: 安装 tkinter（macOS 的 setup-python 默认不带，PyInstaller 打包 GUI 需要）
+        if: runner.os == 'macOS'
+        run: brew install python-tk@3.12
+
       - name: 打包（PyInstaller 单文件 GUI）
         run: |
           pip install pyinstaller
