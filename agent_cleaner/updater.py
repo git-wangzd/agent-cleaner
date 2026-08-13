@@ -29,7 +29,7 @@ def _parse_repo(repo: str) -> str | None:
 
 
 def check_latest(repo: str, timeout: float = 8.0) -> str | None:
-    """查询 GitHub Releases 最新版本号（如 "v1.0.0"）；查询失败返回 None。
+    """查询 GitHub Releases 最新版本号（如 "v1.0.1"）；查询失败返回 None。
 
     repo 支持 "owner/repo" 或完整 GitHub 地址。
     """
@@ -43,6 +43,35 @@ def check_latest(repo: str, timeout: float = 8.0) -> str | None:
         return data.get("tag_name")
     except Exception:
         return None
+
+
+def latest_release(repo: str, timeout: float = 8.0) -> tuple[str, str] | None:
+    """查询 GitHub Releases 最新版本号与更新说明（如 ("v1.0.1", "修复一键清理…")）。
+
+    返回 (版本号, Release body 更新说明)；查询失败返回 None。
+    repo 支持 "owner/repo" 或完整 GitHub 地址。
+    """
+    parsed = _parse_repo(repo)
+    if not parsed:
+        return None
+    url = f"https://api.github.com/repos/{parsed}/releases/latest"
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return data.get("tag_name"), data.get("body") or ""
+    except Exception:
+        return None
+
+
+def download_url(repo: str, version: str) -> str | None:
+    """生成指定版本在 GitHub Releases 的下载页地址（如 "v1.0.1" → …/releases/tag/v1.0.1）。
+
+    repo 支持 "owner/repo" 或完整 GitHub 地址；解析失败或版本为空返回 None。
+    """
+    parsed = _parse_repo(repo)
+    if not parsed or not version:
+        return None
+    return f"https://github.com/{parsed}/releases/tag/{version}"
 
 
 def is_newer(remote: str, local: str) -> bool:

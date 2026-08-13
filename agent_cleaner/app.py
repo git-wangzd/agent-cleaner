@@ -31,7 +31,7 @@ from .logs import get_logger
 from .models import AgentReport, Session, human_size
 from .registry import all_agents
 from .scanner import scan_all, summary_line
-from .updater import check_latest, is_newer
+from .updater import check_latest, download_url, is_newer
 from .utils import ToolTip, open_in_file_manager, reveal_target
 
 CHECK = "✅"        # 已勾选（大号符号，比 ☑ 更醒目）
@@ -455,9 +455,11 @@ class App(tk.Tk):
     def _on_update_result(self, latest, status: str, manual: bool) -> None:
         """更新检查结果（主线程）：新版本/已最新/检查失败。"""
         if status == "new":
+            url = download_url(config.get_update_repo(), latest)
             messagebox.showinfo(
                 "发现新版本",
-                f"当前版本：{__version__}\n最新版本：{latest}\n\n请到 GitHub Releases 页面下载更新。",
+                f"当前版本：{__version__}\n最新版本：{latest}\n\n"
+                f"下载地址：{url}\n\n请打开上面的地址下载对应平台安装包。",
             )
         elif manual:  # 手动检查时才提示"已最新/失败"，自动检查保持静默
             if status == "current":

@@ -45,7 +45,7 @@ from agent_cleaner.cleaner import (
     quick_clean_target,
 )
 from agent_cleaner.logs import get_logger
-from agent_cleaner.updater import _parse_repo, check_latest, is_newer
+from agent_cleaner.updater import _parse_repo, check_latest, download_url, is_newer
 from agent_cleaner.models import AgentReport, Session, human_size
 from agent_cleaner.scanner import scan_all, summary_line
 from agent_cleaner.trash import _parse_sqlite_path
@@ -829,6 +829,21 @@ class UpdaterTest(unittest.TestCase):
         # 网络不可达时不应崩溃，返回 None
         result = check_latest("nonexistent-owner-xyz/nonexistent-repo-xyz", timeout=3)
         self.assertTrue(result is None or isinstance(result, str))
+
+    def test_download_url(self):
+        # owner/repo 格式 → 对应版本下载页
+        self.assertEqual(
+            download_url("git-wangzd/agent-cleaner", "v1.0.1"),
+            "https://github.com/git-wangzd/agent-cleaner/releases/tag/v1.0.1",
+        )
+        # 完整 GitHub 地址（含 .git 后缀）同样解析
+        self.assertEqual(
+            download_url("https://github.com/git-wangzd/agent-cleaner.git", "v1.0.1"),
+            "https://github.com/git-wangzd/agent-cleaner/releases/tag/v1.0.1",
+        )
+        # 仓库非法或版本为空 → None
+        self.assertIsNone(download_url("", "v1.0.1"))
+        self.assertIsNone(download_url("git-wangzd/agent-cleaner", ""))
 
 
 class FilterByDaysTest(unittest.TestCase):
