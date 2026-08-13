@@ -681,7 +681,7 @@ class App(tk.Tk):
 
     def _quick_clean(self) -> None:
         """一键清理：按顶部时间筛选的天数，清理所有 Agent 中更早的旧会话（不含附属数据）。"""
-        days = self._filter_days()
+        days = self.filter_days
         if not days:
             messagebox.showinfo("提示", "请先在顶部选择时间（如 90 天）——一键清理会清掉更早的旧会话。")
             return
