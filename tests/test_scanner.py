@@ -252,6 +252,23 @@ class OpenCodeScanTest(BasePatchTest):
         self.assertEqual(s.size, 9)  # message(5) + part(4)
 
 
+class TrashEscapeTest(unittest.TestCase):
+    """回收站命令的路径引号转义。"""
+
+    def test_ps_str_escapes_quote(self):
+        from agent_cleaner.trash import _ps_str
+
+        self.assertEqual(_ps_str("C:/O'Brien/data"), "C:/O''Brien/data")
+        self.assertEqual(_ps_str("plain/path"), "plain/path")
+
+    def test_macos_escape(self):
+        # 路径含双引号与反斜杠时 osascript 脚本不应被破坏
+        p = 'C:/a"b\\c'
+        escaped = p.replace("\\", "\\\\").replace('"', '\\"')
+        self.assertIn('\\"', escaped)
+        self.assertIn('\\\\', escaped)
+
+
 class OpenCodeDeletePathTest(unittest.TestCase):
     def test_parse_sqlite_path(self):
         db, sid = _parse_sqlite_path("sqlite://C:/x/opencode.db#abc123")
@@ -438,13 +455,18 @@ class DomesticCliTest(BasePatchTest):
         self.assertTrue(agent.detect())
         self.assertEqual(len(agent.scan()), 1)
 
-    def test_kimi_no_sessions_returns_empty(self):
-        # 目录存在但没有明确会话结构 → 返回空，不误扫
+    def test_kimi_config_only_not_detected(self):
+        # 只有配置文件的同名目录不应被误报为已安装
         (self.tmp / ".kimi").mkdir(parents=True)
         (self.tmp / ".kimi" / "auth.json").write_text("{}", encoding="utf-8")
         agent = KimiAgent()
-        self.assertTrue(agent.detect())
-        self.assertEqual(agent.scan(), [])
+        self.assertFalse(agent.detect())
+
+    def test_marscode_config_only_not_detected(self):
+        (self.tmp / ".marscode").mkdir(parents=True)
+        (self.tmp / ".marscode" / "auth.json").write_text("{}", encoding="utf-8")
+        agent = MarsCodeAgent()
+        self.assertFalse(agent.detect())
 
     def test_marscode_no_dir_not_detected(self):
         agent = MarsCodeAgent()

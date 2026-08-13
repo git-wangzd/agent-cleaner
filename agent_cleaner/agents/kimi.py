@@ -29,7 +29,14 @@ class KimiAgent(Agent):
         self.root = self.resolve_root(self.home_dir() / ".kimi")
 
     def detect(self) -> bool:
-        return self.root.is_dir()
+        """只在存在会话特征（候选会话子目录或 jsonl）时判定为已安装，
+        避免 ~/.kimi 同名无关目录（只有配置文件）被误报。"""
+        if not self.root.is_dir():
+            return False
+        for sub in _CANDIDATE_DIRS:
+            if (self.root / sub).is_dir():
+                return True
+        return any(self.root.glob("*.jsonl"))
 
     def storage_root(self) -> str | None:
         return str(self.root) if self.root.is_dir() else None

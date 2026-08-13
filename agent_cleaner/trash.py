@@ -49,20 +49,26 @@ def _run(cmd: list[str]) -> None:
         raise TrashError((proc.stderr or proc.stdout or "").strip()[:500])
 
 
+def _ps_str(s: str) -> str:
+    """PowerShell 单引号字符串内转义：单引号翻倍。"""
+    return s.replace("'", "''")
+
+
 def _trash_windows(path: Path) -> None:
     """Windows：通过 PowerShell 的 VisualBasic.FileIO 移入回收站。"""
     ps = (
         "Add-Type -AssemblyName Microsoft.VisualBasic; "
         f"[Microsoft.VisualBasic.FileIO.FileSystem]::Delete"
         f"{'Directory' if path.is_dir() else 'File'}("
-        f"'{str(path)}', 'OnlyErrorDialogs', 'SendToRecycleBin')"
+        f"'{_ps_str(str(path))}', 'OnlyErrorDialogs', 'SendToRecycleBin')"
     )
     _run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps])
 
 
 def _trash_macos(path: Path) -> None:
-    """macOS：通过 Finder（osascript）删除，进入废纸篓。"""
-    script = f'tell application "Finder" to delete POSIX file "{str(path)}"'
+    """macOS：通过 Finder（osascript）删除，进入废纸篓（转义双引号与反斜杠）。"""
+    escaped = str(path).replace("\\", "\\\\").replace('"', '\\"')
+    script = f'tell application "Finder" to delete POSIX file "{escaped}"'
     _run(["osascript", "-e", script])
 
 
@@ -115,11 +121,13 @@ def delete_session(session: Session, permanent: bool = False) -> None:
     if permanent:
         if session.is_dir:
             shutil.rmtree(path, ignore_errors=True)
+            if path.exists():  # 权限不足/占用时 rmtree 可能残留，静默会误导用户
+                raise TrashError(f"删除失败（可能被占用或权限不足）: {path}")
         else:
             try:
                 path.unlink()
-            except OSError:
-                pass
+            except OSError as e:
+                raise TrashError(f"删除失败: {path} ({e})") from e
     else:
         if _is_windows():
             _trash_windows(path)
@@ -202,7 +210,7 @@ def _delete_sqlite_session(session: Session) -> None:
             pass
         msg = str(e).lower()
         if "locked" in msg or "busy" in msg:
-            raise TrashError("opencode 正在运行中（数据库被占用），请先退出 opencode 再清理。") from e
+            raise TrashError("该 Agent 正在运行中（数据库被占用），请先退出后再清理。") from e
         raise TrashError(f"SQLite 删除失败: {e}") from e
     finally:
         con.close()
