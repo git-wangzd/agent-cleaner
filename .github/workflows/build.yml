@@ -62,7 +62,13 @@ jobs:
       - name: 清理旧 Release（重发同名 tag 时删除旧 Release，避免残留旧命名资产）
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release delete "${{ github.ref_name }}" --yes || true
+        run: |
+          if gh release view "${{ github.ref_name }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release delete "${{ github.ref_name }}" --repo "${{ github.repository }}" --yes
+            echo "已删除旧 Release"
+          else
+            echo "无旧 Release，跳过清理"
+          fi
 
       - name: 发布到 GitHub Release
         uses: softprops/action-gh-release@v2
