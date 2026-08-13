@@ -45,7 +45,7 @@ from agent_cleaner.cleaner import (
     quick_clean_target,
 )
 from agent_cleaner.logs import get_logger
-from agent_cleaner.updater import check_latest, is_newer
+from agent_cleaner.updater import _parse_repo, check_latest, is_newer
 from agent_cleaner.models import AgentReport, Session, human_size
 from agent_cleaner.scanner import scan_all, summary_line
 from agent_cleaner.trash import _parse_sqlite_path
@@ -808,6 +808,17 @@ class UpdaterTest(unittest.TestCase):
         self.assertFalse(is_newer("v1.0.0", "1.0.0"))
         self.assertFalse(is_newer("0.9.0", "1.0.0"))
         self.assertFalse(is_newer("1.0.0", "1.0.1"))
+
+    def test_parse_repo(self):
+        # owner/repo 格式
+        self.assertEqual(_parse_repo("git-wangzd/agent-cleaner"), "git-wangzd/agent-cleaner")
+        # 完整 GitHub 地址（含 .git 后缀）
+        self.assertEqual(_parse_repo("https://github.com/git-wangzd/agent-cleaner"), "git-wangzd/agent-cleaner")
+        self.assertEqual(_parse_repo("https://github.com/git-wangzd/agent-cleaner.git"), "git-wangzd/agent-cleaner")
+        # 非法输入
+        self.assertIsNone(_parse_repo(""))
+        self.assertIsNone(_parse_repo("https://example.com/x/y"))
+        self.assertIsNone(_parse_repo("plain-string-no-slash"))
 
     def test_check_latest_invalid_repo(self):
         # 仓库格式不合法或网络失败 → 返回 None（不抛异常）
