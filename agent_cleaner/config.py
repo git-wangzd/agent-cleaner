@@ -72,7 +72,7 @@ def set_big_file_mb(mb: int) -> None:
     save_config(cfg)
 
 
-DEFAULT_UPDATE_REPO = "wangzhaodong/agent-cleaner"  # 写死的默认更新检查仓库
+DEFAULT_UPDATE_REPO = "git-wangzd/agent-cleaner"  # 写死的默认更新检查仓库
 
 
 def get_update_repo() -> str:
