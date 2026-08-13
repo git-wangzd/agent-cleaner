@@ -31,7 +31,7 @@ from .logs import get_logger
 from .models import AgentReport, Session, human_size
 from .registry import all_agents
 from .scanner import scan_all, summary_line
-from .updater import update_available
+from .updater import check_latest, is_newer
 from .utils import ToolTip, open_in_file_manager, reveal_target
 
 CHECK = "✅"        # 已勾选（大号符号，比 ☑ 更醒目）
@@ -93,6 +93,7 @@ class App(tk.Tk):
         self.btn_quick = ttk.Button(top, text="一键清理", command=self._quick_clean)
         self.btn_quick.pack(side="left", padx=(6, 0))
         self.control_buttons.append(self.btn_quick)
+        ttk.Button(top, text="检查更新", command=lambda: self._check_update(manual=True)).pack(side="left", padx=(6, 0))
 
         # 上下分割
         paned = ttk.PanedWindow(self, orient="vertical")
@@ -197,6 +198,8 @@ class App(tk.Tk):
                     self._on_clean_done(msg[1])
                 elif kind == "clean_error":
                     self._on_clean_error(msg[1])
+                elif kind == "update_result":
+                    self._on_update_result(msg[1], msg[2], msg[3])
         except queue.Empty:
             pass
         self.after(50, self._poll_ui_queue)  # 继续轮询
@@ -427,24 +430,40 @@ class App(tk.Tk):
 
     # ---------- 版本检查 ----------
 
-    def _check_update(self) -> None:
-        """后台线程检查 GitHub Releases 是否有新版本（配置了仓库才检查）。"""
+    def _check_update(self, manual: bool = False) -> None:
+        """检查更新：启动自动（manual=False，仅新版本时提示）或手动按钮触发。
+
+        结果经消息队列回主线程处理（避免线程里调 Tk）。
+        """
         repo = config.get_update_repo()
         if not repo:
+            if manual:
+                messagebox.showinfo("检查更新", "未配置更新检查仓库：请到设置中填写 GitHub 仓库（owner/repo）。")
             return
 
         def worker() -> None:
-            latest = update_available(repo)
-            if latest:
-                self.after(0, lambda: self._on_update_available(latest))
+            latest = check_latest(repo)
+            if latest is None:
+                self._msg_queue.put(("update_result", None, "error", manual))
+            elif is_newer(latest, __version__):
+                self._msg_queue.put(("update_result", latest, "new", manual))
+            else:
+                self._msg_queue.put(("update_result", None, "current", manual))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_update_available(self, latest: str) -> None:
-        messagebox.showinfo(
-            "发现新版本",
-            f"当前版本：{__version__}\n最新版本：{latest}\n\n请到 GitHub Releases 页面下载更新。",
-        )
+    def _on_update_result(self, latest, status: str, manual: bool) -> None:
+        """更新检查结果（主线程）：新版本/已最新/检查失败。"""
+        if status == "new":
+            messagebox.showinfo(
+                "发现新版本",
+                f"当前版本：{__version__}\n最新版本：{latest}\n\n请到 GitHub Releases 页面下载更新。",
+            )
+        elif manual:  # 手动检查时才提示"已最新/失败"，自动检查保持静默
+            if status == "current":
+                messagebox.showinfo("检查更新", f"已是最新版本（{__version__}）。")
+            else:
+                messagebox.showwarning("检查更新", "检查失败：无法访问 GitHub Releases（网络问题？）。")
 
     # ---------- 设置对话框 ----------
 
@@ -471,13 +490,6 @@ class App(tk.Tk):
         ttk.Label(thr_row, text="大文件标红阈值 (MB):").pack(side="left")
         thr_var = tk.StringVar(value=str(config.get_big_file_mb()))
         ttk.Entry(thr_row, textvariable=thr_var, width=8).pack(side="left", padx=(4, 0))
-
-        # 更新检查仓库（owner/repo；留空 = 不检查更新）
-        up_row = ttk.Frame(win)
-        up_row.pack(fill="x", padx=12, pady=(0, 6))
-        ttk.Label(up_row, text="更新检查仓库:").pack(side="left")
-        up_var = tk.StringVar(value=config.get_update_repo())
-        ttk.Entry(up_row, textvariable=up_var).pack(side="left", fill="x", expand=True, padx=(4, 0))
 
         # 滚动区（Agent 数量多时窗口放不下）
         canvas = tk.Canvas(win, highlightthickness=0)
@@ -543,7 +555,6 @@ class App(tk.Tk):
                 config.set_big_file_mb(int(thr_var.get().strip() or 10))
             except ValueError:
                 pass
-            config.set_update_repo(up_var.get().strip())
             win.destroy()
             self.do_scan()
 

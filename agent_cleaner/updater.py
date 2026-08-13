@@ -1,14 +1,12 @@
 """版本升级检查：从 GitHub Releases 拉取最新版本（标准库 urllib，无第三方依赖）。
 
-仓库名在 config.json 的 update_repo 字段配置（"owner/repo" 格式）；留空则不检查。
+仓库名默认写死在 config.DEFAULT_UPDATE_REPO，可用 config.json 的 update_repo 字段覆盖。
 """
 
 from __future__ import annotations
 
 import json
 import urllib.request
-
-from . import __version__
 
 
 def check_latest(repo: str, timeout: float = 8.0) -> str | None:
@@ -35,11 +33,3 @@ def is_newer(remote: str, local: str) -> bool:
         if r != l:
             return r > l
     return len(rp) > len(lp)
-
-
-def update_available(repo: str) -> str | None:
-    """综合入口：仓库配置了且远程有新版本时返回最新版本号，否则返回 None。"""
-    latest = check_latest(repo)
-    if latest and is_newer(latest, __version__):
-        return latest
-    return None

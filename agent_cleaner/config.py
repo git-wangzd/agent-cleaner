@@ -72,16 +72,9 @@ def set_big_file_mb(mb: int) -> None:
     save_config(cfg)
 
 
+DEFAULT_UPDATE_REPO = "wangzhaodong/agent-cleaner"  # 写死的默认更新检查仓库
+
+
 def get_update_repo() -> str:
-    """版本检查的 GitHub 仓库（owner/repo）；空 = 不检查。"""
-    return load_config().get("update_repo", "")
-
-
-def set_update_repo(repo: str) -> None:
-    """设置版本检查仓库；空字符串表示关闭检查。"""
-    cfg = load_config()
-    if repo:
-        cfg["update_repo"] = repo
-    else:
-        cfg.pop("update_repo", None)
-    save_config(cfg)
+    """版本检查的 GitHub 仓库（owner/repo）：优先 config 覆盖，否则用写死的默认值。"""
+    return load_config().get("update_repo") or DEFAULT_UPDATE_REPO

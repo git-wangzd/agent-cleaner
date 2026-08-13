@@ -696,6 +696,12 @@ class ConfigTest(unittest.TestCase):
         config.set_agent_path("claude", None)
         self.assertIsNone(config.get_agent_path("claude"))
 
+    def test_update_repo_default_hardcoded(self):
+        from agent_cleaner import config
+
+        # 未配置时返回写死的默认仓库
+        self.assertEqual(config.get_update_repo(), config.DEFAULT_UPDATE_REPO)
+
     def test_agent_root_override(self):
         from agent_cleaner import config
 
