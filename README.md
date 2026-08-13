@@ -37,7 +37,7 @@
 
 ### 方式一：下载安装包
 
-从 [GitHub Releases](https://github.com/git-wangzd/agent-cleaner/releases) 下载对应平台的安装包（Windows / macOS / Linux），解压即可运行，无需安装 Python。
+从 [GitHub Releases](https://github.com/git-wangzd/agent-cleaner/releases) 下载对应平台的安装包（Windows / macOS / Linux），解压即可运行，无需安装 Python。安装包按平台命名：`agent-cleaner-windows.exe` / `agent-cleaner-macos` / `agent-cleaner-linux`，按文件名中的平台标识认领。
 
 ### 方式二：源码运行（需要 Python 3.10+）
 

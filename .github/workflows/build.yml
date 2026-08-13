@@ -10,7 +10,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            pkg: agent-cleaner-windows
+          - os: macos-latest
+            pkg: agent-cleaner-macos
+          - os: ubuntu-latest
+            pkg: agent-cleaner-linux
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -29,15 +35,13 @@ jobs:
       - name: 打包（PyInstaller 单文件 GUI）
         run: |
           pip install pyinstaller pillow
-          pyinstaller --onefile --windowed --name agent-cleaner --icon assets/icon.ico main.py
+          pyinstaller --onefile --windowed --name ${{ matrix.pkg }} --icon assets/icon.ico main.py
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
-          name: agent-cleaner-${{ runner.os }}
-          path: |
-            dist/agent-cleaner
-            dist/agent-cleaner.exe
+          name: ${{ matrix.pkg }}
+          path: dist/${{ matrix.pkg }}*
           if-no-files-found: error
 
   # 打 tag（v*）时自动发布到 GitHub Release，附三平台安装包
