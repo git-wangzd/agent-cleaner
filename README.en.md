@@ -1,6 +1,11 @@
 # 🧹 Agent Session Cleaner
 
-> [中文](README.md) | English
+> English | [中文](README.md)
+
+![CI](https://github.com/git-wangzd/agent-cleaner/actions/workflows/build.yml/badge.svg)
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 A cross-platform desktop GUI tool to scan and clean up session and cache data accumulated by various AI agents. **Deletion goes to the recycle bin / trash by default (recoverable).**
 
@@ -20,7 +25,26 @@ Built with pure Python standard library + Tkinter, zero third-party dependencies
 - 📊 Background-thread scanning / cleaning with real-time progress; UI never freezes
 - 🔍 Double-click a session for details; right-click to open its storage folder
 - 🔄 Update check on startup / manually (GitHub Releases)
-- 📦 Three-platform auto builds (GitHub Actions)
+- 📦 Three-platform auto build & release (GitHub Actions)
+
+## 📸 Screenshots
+
+> Placeholder — run `python main.py`, take a screenshot and replace the image below in `docs/screenshots/`.
+
+![Main UI](docs/screenshots/main.png)
+
+## 🚀 Quick Start
+
+### Option 1: Download binaries
+
+Download the installer for your platform from [GitHub Releases](https://github.com/git-wangzd/agent-cleaner/releases) (Windows / macOS / Linux). No Python installation required.
+
+### Option 2: Run from source (requires Python 3.10+)
+
+```bash
+python main.py          # launch the GUI
+python main.py --list   # CLI mode: print scan results only
+```
 
 ## 🤖 Supported Agents
 
@@ -43,24 +67,23 @@ Built with pure Python standard library + Tkinter, zero third-party dependencies
 | AtomCode | `%USERPROFILE%\.atomcode\sessions` |
 | MimoCode | `%USERPROFILE%\.local\share\mimocode` (SQLite) |
 
-## 📥 Installation & Run
-
-### Download binaries
-Get the installer for your platform from [GitHub Releases](https://github.com/git-wangzd/agent-cleaner/releases) (Windows / macOS / Linux) and run it.
-
-### Run from source (requires Python 3.10+)
-
-```bash
-python main.py          # launch the GUI
-python main.py --list   # CLI mode: print scan results only
-```
-
-## 📖 Usage
+## 📖 Usage Guide
 
 1. Launch the app; all agents are scanned automatically
 2. Check an agent (whole package) or individual sessions (use time/project filters + search to locate)
 3. Click "Move to recycle bin" (recoverable) or "Delete permanently" (double confirmation)
 4. Progress is shown in real time; the list refreshes automatically when done
+
+### Common operations
+
+| Action | Description |
+|---|---|
+| Time filter | Top dropdown: 7/30/90 days, shows only older inactive sessions |
+| One-click cleanup | Pick days, click "One-click cleanup" to clear old sessions of all agents |
+| Project filter / search | Filter by project or search by keyword in the session list header |
+| View details | Double-click a session row for metadata details |
+| Open path | Right-click an agent / session row → open storage folder |
+| Settings | Top "Settings" button: path overrides, big-file threshold |
 
 ## ⚙️ Configuration
 
@@ -86,17 +109,45 @@ Config file: `%APPDATA%\agent-cleaner\config.json` (Linux/macOS: `~/.config/agen
 - Cleaning OpenCode / MimoCode sessions manipulates their SQLite databases — quit the corresponding agent first
 - Directories that may contain user data (`downloads` / `backups` / memory files) are **never** listed
 
-## 🧪 Development
+## ❓ FAQ
+
+**Q: Can deleted sessions be recovered?**
+A: Yes for "Move to recycle bin"; no for "Delete permanently" (double confirmation required).
+
+**Q: Will cleaning remove my configuration?**
+A: No. Only sessions and cache data are cleaned; config files (`settings.json`, `auth`, memory files) are never listed.
+
+**Q: My agent's data directory is not in the default location.**
+A: Two options: ① official env vars (e.g. `CLAUDE_CONFIG_DIR`) are auto-detected; ② open Settings and pick the real path with the directory chooser.
+
+**Q: What should I know before cleaning OpenCode / MimoCode?**
+A: Quit the agent first — their sessions live in SQLite databases; deletion while in use will fail (the tool will warn you).
+
+**Q: Will the confirmation dialog be huge when many sessions are selected?**
+A: No — it only shows the count and estimated space to be freed.
+
+## 🤝 Contributing
+
+Issues and Pull Requests are welcome:
 
 ```bash
-python -m unittest discover -s tests   # unit tests (74)
+python -m unittest discover -s tests   # run unit tests (75)
 python smoke_test.py                    # GUI smoke test
 ```
+
+- To add a new agent: follow the existing scanners in `agent_cleaner/agents/`
+- Keep the code style consistent (Python standard library, type hints)
+
+## 📜 Changelog
+
+### v1.0.0 (2026-08-13)
+
+- 16 agents supported (Claude Code / Codex / Cursor / OpenCode / Qwen / AtomCode / MimoCode, etc.)
+- Sessions & auxiliary data cleaned separately; time/project filters, search, one-click cleanup, invert selection
+- Custom path config (env vars + settings UI), session details, right-click open path
+- Background-thread scanning/cleaning, real-time progress, error logging, update check
+- Three-platform auto build & release (GitHub Actions), 75 unit tests
 
 ## 📄 License
 
 [MIT](LICENSE)
-
----
-
-**v1.0.0**: 16 agents supported, complete cleanup ecosystem, 74 unit tests, three-platform auto build & release.
