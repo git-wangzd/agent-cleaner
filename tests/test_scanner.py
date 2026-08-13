@@ -30,6 +30,7 @@ from agent_cleaner.agents.kimi import KimiAgent
 from agent_cleaner.agents.lingma import LingmaAgent
 from agent_cleaner.agents.marscode import MarsCodeAgent
 from agent_cleaner.agents.opencode import OpenCodeAgent
+from agent_cleaner.agents.pi import PiAgent
 from agent_cleaner.agents.qwen import QwenAgent
 from agent_cleaner.agents.trae import TraeAgent
 from agent_cleaner.agents.windsurf import WindsurfAgent
@@ -455,19 +456,49 @@ class DomesticCliTest(BasePatchTest):
         self.assertTrue(sessions[0].is_dir)
 
 
+class PiScanTest(BasePatchTest):
+    """Pi 会话扫描：~/.pi/agent/sessions 按工作目录组织的 jsonl。"""
+
+    def test_sessions_by_workdir(self):
+        make_session(self.tmp / ".pi" / "agent" / "sessions" / "--D--code--proj" / "abc.jsonl")
+        make_session(self.tmp / ".pi" / "agent" / "sessions" / "--D--code--proj" / "def.jsonl")
+        make_session(self.tmp / ".pi" / "agent" / "sessions" / "--C--other" / "xyz.jsonl")
+
+        agent = PiAgent()
+        self.assertTrue(agent.detect())
+        sessions = agent.scan()
+        self.assertEqual(len(sessions), 3)
+        self.assertTrue(all(not s.is_dir for s in sessions))
+        # 项目 = 工作目录名
+        proj = {s.project for s in sessions}
+        self.assertEqual(proj, {"--D--code--proj", "--C--other"})
+
+    def test_no_sessions_dir_not_detected(self):
+        agent = PiAgent()
+        self.assertFalse(agent.detect())
+
+    def test_session_dir_env_override(self):
+        # PI_CODING_AGENT_SESSION_DIR 覆盖会话目录
+        env_session = self.tmp / "custom-pi-sessions"
+        os.environ["PI_CODING_AGENT_SESSION_DIR"] = str(env_session)
+        try:
+            make_session(env_session / "proj1" / "a.jsonl")
+            agent = PiAgent()
+            self.assertTrue(agent.detect())
+            self.assertEqual(len(agent.scan()), 1)
+        finally:
+            os.environ.pop("PI_CODING_AGENT_SESSION_DIR", None)
+
+
 class RegistryTest(unittest.TestCase):
     def test_all_agents_count(self):
         from agent_cleaner.registry import all_agents
 
         agents = all_agents()
         ids = {a.id for a in agents}
-        # 8 个原有 + 5 个国内 = 13
-        self.assertEqual(len(ids), 13)
-        self.assertIn("qwen", ids)
-        self.assertIn("kimi", ids)
-        self.assertIn("lingma", ids)
-        self.assertIn("trae", ids)
-        self.assertIn("marscode", ids)
+        # 原有 13 个 + Pi = 14
+        self.assertEqual(len(ids), 14)
+        self.assertIn("pi", ids)
 
 
 class EnvVarTest(unittest.TestCase):

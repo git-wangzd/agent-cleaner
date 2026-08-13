@@ -13,6 +13,7 @@ from .agents.kimi import KimiAgent
 from .agents.lingma import LingmaAgent
 from .agents.marscode import MarsCodeAgent
 from .agents.opencode import OpenCodeAgent
+from .agents.pi import PiAgent
 from .agents.qwen import QwenAgent
 from .agents.trae import TraeAgent
 from .agents.windsurf import WindsurfAgent
@@ -31,6 +32,7 @@ def all_agents() -> list[Agent]:
         LingmaAgent(),
         MarsCodeAgent(),
         OpenCodeAgent(),
+        PiAgent(),
         QwenAgent(),
         TraeAgent(),
         WindsurfAgent(),
