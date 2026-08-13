@@ -100,12 +100,12 @@ def delete_session(session: Session, permanent: bool = False) -> None:
     """删除一个会话。
 
     默认进入回收站（可恢复）；permanent=True 时直接永久删除。
-    session 为 OpenCode 新版（sqlite://）会话时走 SQL 删除；
+    session 为 sqlite:// 会话（OpenCode / MimoCode 新版，数据库存储）时走 SQL 删除；
     session 为 OpenCode 旧版文件会话时，联动删除同名 message/part/tool-output 目录。
     """
-    # OpenCode 新版：SQLite 会话（不受回收站/永久分支影响）
+    # SQLite 会话（不受回收站/永久分支影响）
     if session.path.startswith("sqlite://"):
-        _delete_opencode_sqlite(session)
+        _delete_sqlite_session(session)
         return
 
     path = Path(session.path)
@@ -147,7 +147,7 @@ def delete_session(session: Session, permanent: bool = False) -> None:
                         _trash_linux(extra)
 
 
-# ---- OpenCode 新版：SQLite 会话删除 ----
+# ---- SQLite 会话删除（OpenCode / MimoCode 新版共用） ----
 
 # 与 session 存在外键关联的表（按 session_id 关联），删除会话时同步清理
 _SQLITE_SESSION_TABLES = (
@@ -172,8 +172,8 @@ def _parse_sqlite_path(path: str) -> tuple[Path, str] | None:
     return Path(db), sid
 
 
-def _delete_opencode_sqlite(session: Session) -> None:
-    """删除 OpenCode 新版 SQLite 数据库里的单个会话，并 VACUUM 释放空间。"""
+def _delete_sqlite_session(session: Session) -> None:
+    """删除 SQLite 会话数据库（opencode/mimocode 同架构）里的单个会话，并 VACUUM 释放空间。"""
     parsed = _parse_sqlite_path(session.path)
     if parsed is None:
         raise TrashError(f"无法解析 sqlite 会话路径: {session.path}")

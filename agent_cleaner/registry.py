@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .agents.base import Agent
+from .agents.atomcode import AtomCodeAgent
 from .agents.claude import ClaudeAgent
 from .agents.cline import ClineAgent
 from .agents.codex import CodexAgent
@@ -12,6 +13,7 @@ from .agents.gemini import GeminiAgent
 from .agents.kimi import KimiAgent
 from .agents.lingma import LingmaAgent
 from .agents.marscode import MarsCodeAgent
+from .agents.mimocode import MimoCodeAgent
 from .agents.opencode import OpenCodeAgent
 from .agents.pi import PiAgent
 from .agents.qwen import QwenAgent
@@ -22,6 +24,7 @@ from .agents.windsurf import WindsurfAgent
 def all_agents() -> list[Agent]:
     """返回全部支持的 Agent 实例（按显示名排序）。"""
     agents = [
+        AtomCodeAgent(),
         ClaudeAgent(),
         ClineAgent(),
         CodexAgent(),
@@ -31,6 +34,7 @@ def all_agents() -> list[Agent]:
         KimiAgent(),
         LingmaAgent(),
         MarsCodeAgent(),
+        MimoCodeAgent(),
         OpenCodeAgent(),
         PiAgent(),
         QwenAgent(),

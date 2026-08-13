@@ -21,6 +21,7 @@ import tempfile
 import os
 
 from agent_cleaner import models
+from agent_cleaner.agents.atomcode import AtomCodeAgent
 from agent_cleaner.agents.claude import ClaudeAgent
 from agent_cleaner.agents.codex import CodexAgent
 from agent_cleaner.agents.continue_agent import ContinueAgent
@@ -29,6 +30,7 @@ from agent_cleaner.agents.gemini import GeminiAgent
 from agent_cleaner.agents.kimi import KimiAgent
 from agent_cleaner.agents.lingma import LingmaAgent
 from agent_cleaner.agents.marscode import MarsCodeAgent
+from agent_cleaner.agents.mimocode import MimoCodeAgent
 from agent_cleaner.agents.opencode import OpenCodeAgent
 from agent_cleaner.agents.pi import PiAgent
 from agent_cleaner.agents.qwen import QwenAgent
@@ -75,10 +77,14 @@ class BasePatchTest(unittest.TestCase):
 
     _ENV_VARS = (
         "APPDATA",
+        "ATOMCODE_HOME",
+        "MIMOCODE_HOME",
         "CLAUDE_CONFIG_DIR",
         "QWEN_HOME",
         "CODEX_HOME",
         "CONTINUE_GLOBAL_DIR",
+        "PI_CODING_AGENT_DIR",
+        "PI_CODING_AGENT_SESSION_DIR",
         "XDG_DATA_HOME",
     )
 
@@ -490,15 +496,96 @@ class PiScanTest(BasePatchTest):
             os.environ.pop("PI_CODING_AGENT_SESSION_DIR", None)
 
 
+class AtomCodeScanTest(BasePatchTest):
+    """AtomCode 会话扫描：~/.atomcode/sessions/<会话id>/<uuid>.jsonl（目录粒度）。"""
+
+    def test_session_dirs(self):
+        make_session(self.tmp / ".atomcode" / "sessions" / "abc123" / "uuid-1.jsonl", "x" * 10)
+        make_session(self.tmp / ".atomcode" / "sessions" / "def456" / "uuid-2.jsonl", "x" * 10)
+        # 无 jsonl 的目录不应被列为会话
+        (self.tmp / ".atomcode" / "sessions" / "empty").mkdir(parents=True)
+
+        agent = AtomCodeAgent()
+        self.assertTrue(agent.detect())
+        sessions = agent.scan()
+        self.assertEqual(len(sessions), 2)
+        self.assertTrue(all(s.is_dir for s in sessions))
+
+    def test_cache_logs_are_aux(self):
+        make_session(self.tmp / ".atomcode" / "cache" / "c1", "x")
+        make_session(self.tmp / ".atomcode" / "logs" / "l1", "x")
+        make_session(self.tmp / ".atomcode" / "sessions" / "sid1" / "a.jsonl", "x")
+
+        agent = AtomCodeAgent()
+        sessions = agent.scan()
+        aux = {s.name for s in sessions if s.kind == "aux"}
+        self.assertEqual(aux, {"缓存 cache", "日志 logs"})
+
+
+class MimoCodeScanTest(BasePatchTest):
+    """MimoCode 会话扫描：mimocode.db（SQLite，与 OpenCode 同架构）。"""
+
+    def _make_db(self):
+        db = self.tmp / "local_share" / "mimocode" / "mimocode.db"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        con = sqlite3.connect(str(db))
+        con.executescript(
+            """
+            CREATE TABLE project (id TEXT PRIMARY KEY, name TEXT);
+            CREATE TABLE session (id TEXT PRIMARY KEY, project_id TEXT, title TEXT,
+                                  slug TEXT, directory TEXT, time_updated REAL);
+            CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT, data TEXT);
+            CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT, data TEXT);
+            INSERT INTO project VALUES ('p1', NULL);
+            INSERT INTO session VALUES ('sess-1', 'p1', '修bug', 'fix', 'D:/code/myapp', 1750000000);
+            INSERT INTO message VALUES ('m1', 'sess-1', 'hello');
+            INSERT INTO part VALUES ('p1', 'm1', 'sess-1', 'xxxx');
+            """
+        )
+        con.commit()
+        con.close()
+        return db
+
+    def test_sqlite_sessions(self):
+        db = self._make_db()
+        agent = MimoCodeAgent()
+        self.assertTrue(agent.detect())
+        sessions = agent.scan()
+        self.assertEqual(len(sessions), 1)
+        s = sessions[0]
+        self.assertTrue(s.path.startswith("sqlite://"))
+        # project.name 为 NULL 时回退 directory 目录名
+        self.assertEqual(s.project, "myapp")
+        self.assertIn("myapp", s.name)
+        self.assertEqual(s.size, 9)  # message(5) + part(4)
+
+    def test_aux_dirs(self):
+        self._make_db()
+        make_session(self.tmp / "local_share" / "mimocode" / "log" / "x.log", "x")
+        make_session(self.tmp / "local_share" / "mimocode" / "snapshot" / "s1", "x")
+        # memory/ 记忆文件不应列入
+        make_session(self.tmp / "local_share" / "mimocode" / "memory" / "global" / "MEMORY.md", "x")
+
+        agent = MimoCodeAgent()
+        sessions = agent.scan()
+        aux = {s.name for s in sessions if s.kind == "aux"}
+        self.assertEqual(aux, {"日志 log", "快照 snapshot"})
+
+    def test_no_db_not_detected(self):
+        agent = MimoCodeAgent()
+        self.assertFalse(agent.detect())
+
+
 class RegistryTest(unittest.TestCase):
     def test_all_agents_count(self):
         from agent_cleaner.registry import all_agents
 
         agents = all_agents()
         ids = {a.id for a in agents}
-        # 原有 13 个 + Pi = 14
-        self.assertEqual(len(ids), 14)
-        self.assertIn("pi", ids)
+        # 原有 14 个 + AtomCode + MimoCode = 16
+        self.assertEqual(len(ids), 16)
+        self.assertIn("atomcode", ids)
+        self.assertIn("mimocode", ids)
 
 
 class EnvVarTest(unittest.TestCase):
