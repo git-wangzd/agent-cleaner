@@ -59,6 +59,11 @@ jobs:
           pattern: agent-cleaner-*
           merge-multiple: true
 
+      - name: 清理旧 Release（重发同名 tag 时删除旧 Release，避免残留旧命名资产）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete "${{ github.ref_name }}" --yes || true
+
       - name: 发布到 GitHub Release
         uses: softprops/action-gh-release@v2
         with:
