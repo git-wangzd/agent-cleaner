@@ -28,7 +28,7 @@ jobs:
 
       - name: 打包（PyInstaller 单文件 GUI）
         run: |
-          pip install pyinstaller
+          pip install pyinstaller pillow
           pyinstaller --onefile --windowed --name agent-cleaner --icon assets/icon.ico main.py
 
       - name: 上传构建产物
