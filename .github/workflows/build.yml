@@ -52,12 +52,20 @@ jobs:
     permissions:
       contents: write  # 创建 Release 需要写权限（默认 token 只有 read）
     steps:
+      - uses: actions/checkout@v4
+
       - name: 下载全部平台产物
         uses: actions/download-artifact@v4
         with:
           path: dist
           pattern: agent-cleaner-*
           merge-multiple: true
+
+      - name: 生成 Release 更新内容（从 CHANGELOG.md 提取当前版本）
+        run: |
+          python scripts/release_notes.py "${{ github.ref_name }}" > release_notes.md
+          echo "--- 生成的更新内容 ---"
+          cat release_notes.md
 
       - name: 清理旧 Release（重发同名 tag 时删除旧 Release，避免残留旧命名资产）
         env:
@@ -74,4 +82,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
-          generate_release_notes: true
+          body_path: release_notes.md

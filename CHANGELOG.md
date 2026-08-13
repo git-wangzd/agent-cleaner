@@ -1,0 +1,33 @@
+# 更新日志
+
+所有重要变更按版本记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
+GitHub Release 的正文由 `scripts/release_notes.py` 从本文件按版本提取，无需跳转查看。
+
+## v1.0.1 - 2026-08-13
+
+### 修复
+- 一键清理按钮点击无反应：`_quick_clean` 调用了不存在的方法 `_filter_days`，
+  异常被 Tkinter 静默吞掉，界面无任何提示。改为直接读取时间筛选属性。
+
+### 改进
+- 构建产物按平台命名：`agent-cleaner-windows.exe` / `agent-cleaner-macos` /
+  `agent-cleaner-linux`，三平台包不再同名互相覆盖。
+- 检测到新版本时，更新提示直接给出下载地址，无需跳转 GitHub Releases 页面。
+- Release 重发（重打同名 tag）时自动删除旧 Release，避免残留旧命名资产。
+
+### 文档
+- 更新主界面截图；移除 README 截图占位说明。
+
+## v1.0.0 - 2026-08-13
+
+### 新增
+- 首个正式版本，支持 16 个 AI Agent（Claude Code / Codex / Cursor / Windsurf /
+  OpenCode / Gemini / Continue / Cline / Qwen / Kimi / 通义灵码 / Trae / MarsCode /
+  Pi / AtomCode / MimoCode）的本地会话与缓存扫描、清理。
+- 会话与附属数据（缓存/日志）分组清理，附属数据默认不勾选；默认删除进回收站（可恢复），
+  永久删除有双重确认。
+- 时间筛选（7/30/90 天）、项目筛选、会话搜索、一键清理、反选。
+- 自定义路径配置（Agent 官方环境变量自动识别 + 设置界面目录选择器）。
+- 双击会话查看详情；右键打开存储目录。
+- 后台线程扫描/清理、实时进度、错误日志、启动/手动检查更新。
+- 三平台自动构建与发布（GitHub Actions）、75 个单元测试。
