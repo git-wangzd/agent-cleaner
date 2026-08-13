@@ -29,8 +29,6 @@
 
 ## 📸 截图
 
-> 截图占位——运行 `python main.py` 后截图，替换下面图片并放入 `docs/screenshots/` 目录。
-
 ![主界面](docs/screenshots/main.png)
 
 ## 🚀 快速开始

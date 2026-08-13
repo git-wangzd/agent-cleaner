@@ -29,8 +29,6 @@ Built with pure Python standard library + Tkinter, zero third-party dependencies
 
 ## 📸 Screenshots
 
-> Placeholder — run `python main.py`, take a screenshot and replace the image below in `docs/screenshots/`.
-
 ![Main UI](docs/screenshots/main.png)
 
 ## 🚀 Quick Start
