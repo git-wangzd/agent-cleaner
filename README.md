@@ -83,23 +83,6 @@ python main.py --list   # 命令行模式：只打印扫描结果
 | 打开路径 | 右键 Agent / 会话行 → 打开存储目录 |
 | 设置 | 顶部「设置」按钮：路径覆盖、大文件阈值 |
 
-## ⚙️ 配置
-
-配置文件位于 `%APPDATA%\agent-cleaner\config.json`（Linux/macOS 为 `~/.config/agent-cleaner/config.json`）：
-
-```json
-{
-  "agent_paths": {
-    "kimi": "D:/my/kimi-data"
-  },
-  "big_file_mb": 10
-}
-```
-
-- **agent_paths**：覆盖某个 Agent 的数据目录（也可在设置界面用目录选择器配置）
-- **big_file_mb**：大文件标红阈值（默认 10 MB，设置界面可改）
-- Agent 官方环境变量（如 `CLAUDE_CONFIG_DIR`、`QWEN_HOME`、`ATOMCODE_HOME` 等）会自动识别
-
 ## 🛡️ 安全说明
 
 - 默认删除进回收站，可恢复；永久删除有双重确认

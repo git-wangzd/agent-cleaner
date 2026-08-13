@@ -83,23 +83,6 @@ python main.py --list   # CLI mode: print scan results only
 | Open path | Right-click an agent / session row → open storage folder |
 | Settings | Top "Settings" button: path overrides, big-file threshold |
 
-## ⚙️ Configuration
-
-Config file: `%APPDATA%\agent-cleaner\config.json` (Linux/macOS: `~/.config/agent-cleaner/config.json`):
-
-```json
-{
-  "agent_paths": {
-    "kimi": "D:/my/kimi-data"
-  },
-  "big_file_mb": 10
-}
-```
-
-- **agent_paths**: override an agent's data directory (or use the directory picker in Settings)
-- **big_file_mb**: big-file highlight threshold (default 10 MB, adjustable in Settings)
-- Official env vars of agents (e.g. `CLAUDE_CONFIG_DIR`, `QWEN_HOME`, `ATOMCODE_HOME`) are auto-detected
-
 ## 🛡️ Safety
 
 - Deletion goes to the recycle bin by default (recoverable); permanent deletion requires double confirmation

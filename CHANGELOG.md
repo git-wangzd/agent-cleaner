@@ -16,7 +16,7 @@ GitHub Release 的正文由 `scripts/release_notes.py` 从本文件按版本提�
 - Release 重发（重打同名 tag）时自动删除旧 Release，避免残留旧命名资产。
 
 ### 文档
-- 更新主界面截图；移除 README 截图占位说明。
+- 更新主界面截图；移除 README 截图占位说明与「配置」章节（设置界面已覆盖）。
 
 ## v1.0.0 - 2026-08-13
 
