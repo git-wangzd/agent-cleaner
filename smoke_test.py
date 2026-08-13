@@ -1,6 +1,7 @@
 """GUI 冒烟测试：验证勾选逻辑与字符渲染（临时诊断脚本，验证后可删）。"""
 
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -10,10 +11,21 @@ from tkinter import font as tkfont
 from agent_cleaner.app import App
 
 
+def wait_scan(app, timeout: float = 15.0) -> None:
+    """等待后台扫描完成（btn_scan 恢复可用）。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        app.update()
+        if "disabled" not in app.btn_scan.state():
+            return
+        time.sleep(0.05)
+
+
 def main() -> None:
     app = App()
     app.update()
     app.do_scan()
+    wait_scan(app)
     app.update()
     print("== reports ==")
     print([(r.agent, len(r.sessions)) for r in app.reports])
@@ -40,8 +52,8 @@ def main() -> None:
     for ch in ["☐", "☑", "□", "■", "✓", "⬜", "✅", "◻", "◼"]:
         print(f"  {ch!r} (U+{ord(ch):04X}) width={f.measure(ch)}")
 
-    app._check_none_agents()
-    app._check_none_sessions()
+    app._invert_agents()  # 之前全选过，反选 = 全部取消
+    app._invert_sessions()
 
     # 异常兜底：替换弹窗避免阻塞，验证按钮/进度条被恢复
     import agent_cleaner.app as appmod

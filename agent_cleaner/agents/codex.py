@@ -17,7 +17,7 @@ from .base import Agent
 class CodexAgent(Agent):
     id = "codex"
     display = "Codex CLI"
-    storage_hint = "~/.codex/sessions (CODEX_HOME 可覆盖)"
+    storage_hint = "~/.codex/sessions"
     env_var = "CODEX_HOME"  # 官方支持
 
     def __init__(self) -> None:

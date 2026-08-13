@@ -20,7 +20,7 @@ from .base import Agent
 class MimoCodeAgent(Agent):
     id = "mimocode"
     display = "MimoCode"
-    storage_hint = "~/.local/share/mimocode (MIMOCODE_HOME 可覆盖)"
+    storage_hint = "~/.local/share/mimocode"
     env_var = "MIMOCODE_HOME"
 
     def __init__(self) -> None:

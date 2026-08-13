@@ -21,7 +21,7 @@ from .base import Agent
 class PiAgent(Agent):
     id = "pi"
     display = "Pi"
-    storage_hint = "~/.pi/agent/sessions (PI_CODING_AGENT_DIR 可覆盖)"
+    storage_hint = "~/.pi/agent/sessions"
     env_var = "PI_CODING_AGENT_DIR"  # 官方支持：覆盖配置目录
 
     def __init__(self) -> None:

@@ -858,6 +858,7 @@ class ProgressCallbackTest(unittest.TestCase):
             result = clean(sessions, permanent=True, progress=lambda d, t, n: calls.append((d, t, n)))
 
             self.assertEqual(len(result.ok), 3)
+            self.assertEqual(result.freed, 30)  # 3 个成功会话 size(10) 之和
             self.assertEqual(calls, [(1, 3, "s0"), (2, 3, "s1"), (3, 3, "s2")])
             self.assertFalse((tmp / "s0.jsonl").exists())
         finally:

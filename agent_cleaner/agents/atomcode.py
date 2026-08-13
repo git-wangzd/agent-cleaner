@@ -20,7 +20,7 @@ from .base import Agent
 class AtomCodeAgent(Agent):
     id = "atomcode"
     display = "AtomCode"
-    storage_hint = "~/.atomcode/sessions (ATOMCODE_HOME 可覆盖)"
+    storage_hint = "~/.atomcode/sessions"
     env_var = "ATOMCODE_HOME"
 
     def __init__(self) -> None:

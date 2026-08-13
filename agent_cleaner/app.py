@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import queue
 import threading
 import time
 import tkinter as tk
@@ -58,6 +59,9 @@ class App(tk.Tk):
         self.search_text = ""                    # 会话搜索关键词
 
         self._build_ui()
+        # 工作线程 → 主线程 的消息队列（Tk 只能在主线程操作）
+        self._msg_queue: queue.Queue = queue.Queue()
+        self._poll_ui_queue()
         self.after(200, self.do_scan)  # 启动后自动扫描一次
         self.after(1500, self._check_update)  # 延迟检查新版本（不阻塞启动）
 
@@ -86,9 +90,9 @@ class App(tk.Tk):
             "按会话最后活动时间筛选，只看 N 天前没用过的旧会话\n（例如选\"30 天\"= 只列出 30 天前没动过的，最近的会话被隐藏）\nAgent 表的会话数与总大小会同步变化",
         )
         ttk.Button(top, text="设置", command=self._open_settings).pack(side="left", padx=(12, 0))
-        b_quick = ttk.Button(top, text="一键清理", command=self._quick_clean)
-        b_quick.pack(side="left", padx=(6, 0))
-        self.control_buttons.append(b_quick)
+        self.btn_quick = ttk.Button(top, text="一键清理", command=self._quick_clean)
+        self.btn_quick.pack(side="left", padx=(6, 0))
+        self.control_buttons.append(self.btn_quick)
 
         # 上下分割
         paned = ttk.PanedWindow(self, orient="vertical")
@@ -101,7 +105,7 @@ class App(tk.Tk):
         top_bar.pack(fill="x", pady=(0, 4))
         b1 = ttk.Button(top_bar, text="全选", command=self._check_all_agents)
         b1.pack(side="left")
-        b2 = ttk.Button(top_bar, text="清空", command=self._check_none_agents)
+        b2 = ttk.Button(top_bar, text="反选", command=self._invert_agents)
         b2.pack(side="left", padx=(4, 0))
         self.control_buttons += [b1, b2]
         cols = ("check", "agent", "sessions", "aux", "size", "storage")
@@ -129,7 +133,7 @@ class App(tk.Tk):
         sess_bar.pack(fill="x", pady=(0, 4))
         b3 = ttk.Button(sess_bar, text="全选", command=self._check_all_sessions)
         b3.pack(side="left")
-        b4 = ttk.Button(sess_bar, text="清空", command=self._check_none_sessions)
+        b4 = ttk.Button(sess_bar, text="反选", command=self._invert_sessions)
         b4.pack(side="left", padx=(4, 0))
         self.control_buttons += [b3, b4]
         # 项目筛选
@@ -173,26 +177,68 @@ class App(tk.Tk):
         b6.pack(side="right", padx=6)
         self.control_buttons += [b5, b6]
 
+    # ---------- 线程通信 ----------
+
+    def _poll_ui_queue(self) -> None:
+        """主线程轮询工作线程消息队列（Tk 只能在主线程操作，线程里禁止调 after）。"""
+        try:
+            while True:
+                msg = self._msg_queue.get_nowait()
+                kind = msg[0]
+                if kind == "status":
+                    self.lbl_status.config(text=msg[1])
+                elif kind == "scan_done":
+                    self._on_scan_done(msg[1])
+                elif kind == "scan_error":
+                    self._on_scan_error(msg[1])
+                elif kind == "clean_progress":
+                    self._on_progress(msg[1], msg[2], msg[3])
+                elif kind == "clean_done":
+                    self._on_clean_done(msg[1])
+                elif kind == "clean_error":
+                    self._on_clean_error(msg[1])
+        except queue.Empty:
+            pass
+        self.after(50, self._poll_ui_queue)  # 继续轮询
+
     # ---------- 扫描 ----------
 
     def do_scan(self) -> None:
-        """重新扫描所有 Agent 并刷新界面。"""
+        """后台线程扫描：界面保持响应，状态栏逐 Agent 显示进度；保留旧数据直到完成。"""
         self.btn_scan.state(["disabled"])
+        self.btn_quick.state(["disabled"])
         self.lbl_status.config(text="正在扫描…")
+
+        def worker() -> None:
+            def on_progress(agent_display: str) -> None:
+                self._msg_queue.put(("status", f"正在扫描 {agent_display} …"))
+
+            try:
+                reports = scan_all(progress=on_progress)
+                self._msg_queue.put(("scan_done", reports))
+            except Exception as e:  # 扫描失败不应崩溃
+                get_logger().error("扫描出错: %s", e)
+                self._msg_queue.put(("scan_error", e))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_scan_done(self, reports: list[AgentReport]) -> None:
+        """扫描线程完成（主线程）：清勾选、刷新界面、恢复按钮。"""
         # 扫描后清空所有勾选，避免残留勾选导致误删
         self.checked_agents.clear()
         self.checked_paths.clear()
-        try:
-            self.reports = scan_all()
-        except Exception as e:  # 扫描失败不应崩溃
-            get_logger().error("扫描出错: %s", e)
-            self.lbl_status.config(text=f"扫描出错: {e}")
-            self.btn_scan.state(["!disabled"])
-            return
+        self.reports = reports
         self._refresh_agents()
-        self.lbl_summary.config(text=summary_line(self.reports))
-        self.lbl_status.config(text=f"扫描完成 {summary_line(self.reports)}")
+        self.lbl_summary.config(text=summary_line(reports))
+        self.lbl_status.config(text=f"扫描完成 {summary_line(reports)}")
         self.btn_scan.state(["!disabled"])
+        self.btn_quick.state(["!disabled"])
+
+    def _on_scan_error(self, exc: Exception) -> None:
+        """扫描线程异常（主线程）：提示并恢复按钮。"""
+        self.lbl_status.config(text=f"扫描出错: {exc}")
+        self.btn_scan.state(["!disabled"])
+        self.btn_quick.state(["!disabled"])
 
     def _refresh_agents(self) -> None:
         self.tree_agents.delete(*self.tree_agents.get_children())
@@ -279,12 +325,17 @@ class App(tk.Tk):
             self.tree_agents.item(r.agent, tags=(CHECKED_TAG,))
         self._update_status()
 
-    def _check_none_agents(self) -> None:
-        """清空 Agent 选择。"""
-        self.checked_agents.clear()
+    def _invert_agents(self) -> None:
+        """反选 Agent：已勾选的取消，未勾选的勾选。"""
         for item in self.tree_agents.get_children():
-            self.tree_agents.set(item, "check", UNCHECK)
-            self.tree_agents.item(item, tags=())
+            if item in self.checked_agents:
+                self.checked_agents.discard(item)
+                self.tree_agents.set(item, "check", UNCHECK)
+                self.tree_agents.item(item, tags=())
+            else:
+                self.checked_agents.add(item)
+                self.tree_agents.set(item, "check", CHECK)
+                self.tree_agents.item(item, tags=(CHECKED_TAG,))
         self._update_status()
 
     def _check_all_sessions(self) -> None:
@@ -295,12 +346,20 @@ class App(tk.Tk):
             self.tree_sessions.item(s.path, tags=(CHECKED_TAG,))
         self._update_status()
 
-    def _check_none_sessions(self) -> None:
-        """清空会话选择。"""
-        self.checked_paths.clear()
-        for item in self.tree_sessions.get_children():
-            self.tree_sessions.set(item, "check", UNCHECK)
-            self.tree_sessions.item(item, tags=())
+    def _invert_sessions(self) -> None:
+        """反选会话：已勾选的取消，未勾选的勾选（当前列表内，保持大文件标红）。"""
+        big_threshold = config.get_big_file_mb() * 1024 * 1024
+        for s in self.sessions:
+            is_big = s.size >= big_threshold
+            if s.path in self.checked_paths:
+                self.checked_paths.discard(s.path)
+                self.tree_sessions.set(s.path, "check", UNCHECK)
+                self.tree_sessions.item(s.path, tags=(BIG_TAG,) if is_big else ())
+            else:
+                self.checked_paths.add(s.path)
+                self.tree_sessions.set(s.path, "check", CHECK)
+                tags = (CHECKED_TAG, BIG_TAG) if is_big else (CHECKED_TAG,)
+                self.tree_sessions.item(s.path, tags=tags)
         self._update_status()
 
     def _selected_sessions(self) -> list[Session]:
@@ -637,12 +696,12 @@ class App(tk.Tk):
         def worker() -> None:
             try:
                 def on_progress(done: int, total: int, name: str) -> None:
-                    self.after(0, lambda: self._on_progress(done, total, name))
+                    self._msg_queue.put(("clean_progress", done, total, name))
 
                 result = clean(sessions, permanent=permanent, progress=on_progress)
-                self.after(0, lambda: self._on_clean_done(result))
+                self._msg_queue.put(("clean_done", result))
             except Exception as e:  # 兜底：任何未预期异常都弹窗提示并恢复界面
-                self.after(0, lambda: self._on_clean_error(e))
+                self._msg_queue.put(("clean_error", e))
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -666,7 +725,7 @@ class App(tk.Tk):
         """清理线程结束后的收尾（主线程）。"""
         self._set_busy(False)
         self.progress.configure(value=0)
-        self.lbl_status.config(text=f"已清理 {len(result.ok)} 个，失败 {len(result.failed)} 个")
+        self.lbl_status.config(text=f"已清理 {len(result.ok)} 个，失败 {len(result.failed)} 个，约释放 {human_size(result.freed)}")
         if result.failed:
             messagebox.showwarning("部分失败", "\n".join(result.failed))
         elif result.ok:

@@ -19,7 +19,7 @@ _CANDIDATE_DIRS = ("sessions", "history", "conversations")
 class MarsCodeAgent(Agent):
     id = "marscode"
     display = "MarsCode CLI"
-    storage_hint = "~/.marscode（推断路径，可用配置覆盖）"
+    storage_hint = "~/.marscode"
 
     def __init__(self) -> None:
         self.root = self.resolve_root(self.home_dir() / ".marscode")

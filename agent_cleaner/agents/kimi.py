@@ -23,7 +23,7 @@ _CANDIDATE_DIRS = ("sessions", "history", "conversations")
 class KimiAgent(Agent):
     id = "kimi"
     display = "Kimi CLI"
-    storage_hint = "~/.kimi（推断路径，可用配置覆盖）"
+    storage_hint = "~/.kimi"
 
     def __init__(self) -> None:
         self.root = self.resolve_root(self.home_dir() / ".kimi")

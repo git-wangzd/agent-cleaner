@@ -77,14 +77,11 @@ class CleanResult:
     permanent: bool = False
     ok: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
-
-    @property
-    def freed(self) -> int:
-        return 0  # 删除前无法精确统计，由调用方传入预估
+    freed: int = 0  # 约释放字节数（成功会话 size 之和；SQLite 会话为估算值）
 
     def summary(self) -> str:
         mode = "永久删除" if self.permanent else "已移入回收站"
-        head = f"{mode}完成：成功 {len(self.ok)} 个"
+        head = f"{mode}完成：成功 {len(self.ok)} 个，约释放 {human_size(self.freed)}"
         if self.failed:
             head += f"，失败 {len(self.failed)} 个"
         lines = [head]
@@ -114,8 +111,10 @@ def clean(sessions: list[Session], permanent: bool = False, progress=None) -> Cl
     if not sessions:
         return CleanResult(permanent=permanent)
     ok, failed = delete_sessions(sessions, permanent=permanent, progress=progress)
+    ok_set = set(ok)
+    freed = sum(s.size for s in sessions if s.path in ok_set)
     if failed:
         get_logger().warning("批量清理失败 %d/%d 个", len(failed), len(sessions))
         for msg in failed:
             get_logger().warning("  %s", msg)
-    return CleanResult(permanent=permanent, ok=ok, failed=failed)
+    return CleanResult(permanent=permanent, ok=ok, failed=failed, freed=freed)

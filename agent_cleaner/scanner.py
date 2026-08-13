@@ -6,13 +6,17 @@ from .models import AgentReport
 from .registry import all_agents
 
 
-def scan_all() -> list[AgentReport]:
+def scan_all(progress=None) -> list[AgentReport]:
     """扫描全部 Agent，返回每个 Agent 的报告（只包含实际存在的）。
 
     只读操作，不会删除任何东西。
+    progress 为可选回调 progress(agent_display)，每开始扫描一个 Agent 调用一次，
+    供界面显示实时进度（在调用方的工作线程中执行）。
     """
     reports: list[AgentReport] = []
     for agent in all_agents():
+        if progress is not None:
+            progress(agent.display)
         try:
             detected = agent.detect()
         except Exception:
