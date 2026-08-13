@@ -93,14 +93,11 @@ class CleanResult:
 
 
 def preview(sessions: list[Session]) -> str:
-    """dry-run 预览：列出将删除的内容和预计释放空间，不真正删除。"""
+    """dry-run 预览：只提示将删除的会话数与预计释放空间，不真正删除。"""
     if not sessions:
         return "没有选中任何会话。"
     total = sum(s.size for s in sessions)
-    lines = [f"将清理 {len(sessions)} 个会话，预计释放 {human_size(total)}："]
-    for s in sessions:
-        lines.append(f"  - [{s.agent}] {s.name} ({s.size_human()}, 最后活动 {s.modified_human()})")
-    return "\n".join(lines)
+    return f"将清理 {len(sessions)} 个会话，预计释放 {human_size(total)}"
 
 
 def clean(sessions: list[Session], permanent: bool = False, progress=None) -> CleanResult:

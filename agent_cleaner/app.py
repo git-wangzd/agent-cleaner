@@ -45,7 +45,7 @@ BIG_FG = "#cc0000"               # 大文件行文字色
 class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("Agent 会话清理工具")
+        self.title(f"Agent 会话清理工具 v{__version__}")
         self.geometry("1000x720")
         self.minsize(820, 560)
 
@@ -653,13 +653,14 @@ class App(tk.Tk):
 
         confirm_title = "永久删除确认" if permanent else "确认清理"
         aux_count = sum(1 for s in selected if s.kind == "aux")
-        aux_warn = (
-            f"\n\n⚠️ 其中包含 {aux_count} 个附属数据（缓存/日志等），"
-            "删除后通常无法恢复，请确认不再需要。"
-            if aux_count
-            else ""
-        )
         if permanent:
+            # 永久删除：附属数据提示"无法恢复"是合理的
+            aux_warn = (
+                f"\n\n⚠️ 其中包含 {aux_count} 个附属数据（缓存/日志等），"
+                "删除后通常无法恢复，请确认不再需要。"
+                if aux_count
+                else ""
+            )
             ok = messagebox.askyesno(
                 confirm_title,
                 "⚠️ 永久删除不可恢复！\n\n" + preview(selected) + aux_warn,
@@ -670,7 +671,9 @@ class App(tk.Tk):
             if not ok:
                 return
         else:
-            ok = messagebox.askyesno(confirm_title, "以下内容将移入回收站（可恢复）：\n\n" + preview(selected) + aux_warn)
+            # 回收站模式可恢复，不做"不可恢复"警告，仅中性提示
+            aux_note = f"\n\n（含 {aux_count} 个附属数据：缓存/日志等）" if aux_count else ""
+            ok = messagebox.askyesno(confirm_title, "以下内容将移入回收站（可恢复）：\n\n" + preview(selected) + aux_note)
             if not ok:
                 return
 
@@ -687,12 +690,10 @@ class App(tk.Tk):
             messagebox.showinfo("提示", f"没有超过 {days} 天未活动的旧会话。")
             return
         total = sum(s.size for s in target)
-        names = "\n".join(f"  - {s.name}" for s in target[:8])
-        more = f"\n  … 共 {len(target)} 个" if len(target) > 8 else ""
         ok = messagebox.askyesno(
             "一键清理确认",
-            f"将清理所有 Agent 中超过 {days} 天未活动的 {len(target)} 个旧会话（共 {human_size(total)}），\n"
-            f"移入回收站（可恢复）：\n\n{names}{more}",
+            f"将清理所有 Agent 中超过 {days} 天未活动的 {len(target)} 个旧会话（约 {human_size(total)}），\n"
+            "移入回收站（可恢复）。",
         )
         if not ok:
             return
@@ -738,7 +739,9 @@ class App(tk.Tk):
         self.progress.configure(value=0)
         self.lbl_status.config(text=f"已清理 {len(result.ok)} 个，失败 {len(result.failed)} 个，约释放 {human_size(result.freed)}")
         if result.failed:
-            messagebox.showwarning("部分失败", "\n".join(result.failed))
+            shown = result.failed[:20]
+            more = f"\n… 共 {len(result.failed)} 条失败" if len(result.failed) > 20 else ""
+            messagebox.showwarning("部分失败", "\n".join(shown) + more)
         elif result.ok:
             messagebox.showinfo("完成", result.summary())
         self.do_scan()  # 清理后刷新

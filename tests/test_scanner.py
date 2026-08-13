@@ -354,7 +354,17 @@ class PreviewTest(unittest.TestCase):
         s = Session(agent="claude", name="demo", path="/x/y.jsonl", size=1024, modified=0, is_dir=False)
         text = preview([s])
         self.assertIn("1 个会话", text)
-        self.assertIn("demo", text)
+        self.assertIn("1.0 KB", text)
+        self.assertNotIn("demo", text)  # 只提示数量，不列明细
+
+    def test_preview_many(self):
+        sessions = [
+            Session(agent="x", name=f"s{i}", path=f"/x/{i}", size=10, modified=0, is_dir=False)
+            for i in range(30)
+        ]
+        text = preview(sessions)
+        self.assertIn("将清理 30 个会话", text)
+        self.assertNotIn("  - [", text)  # 不列明细
 
 
 class AuxDataTest(BasePatchTest):
