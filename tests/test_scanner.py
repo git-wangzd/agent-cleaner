@@ -56,7 +56,21 @@ class HumanSizeTest(unittest.TestCase):
 
 
 class BasePatchTest(unittest.TestCase):
-    """把 Agent 的 home/appdata/local_share 都指到 tmp 下。"""
+    """把 Agent 的 home/appdata/local_share 指到 tmp 下，并隔离 config.json 与环境变量。
+
+    Agent 路径解析现在走 resolve_root（config 覆盖 > 环境变量 > 默认路径），
+    因此除了 monkeypatch 目录方法，还必须隔离 APPDATA（config 读取）和
+    清空各 Agent 的数据目录环境变量，否则会被真实用户配置干扰。
+    """
+
+    _ENV_VARS = (
+        "APPDATA",
+        "CLAUDE_CONFIG_DIR",
+        "QWEN_HOME",
+        "CODEX_HOME",
+        "CONTINUE_GLOBAL_DIR",
+        "XDG_DATA_HOME",
+    )
 
     def setUp(self):
         import tempfile
@@ -64,6 +78,11 @@ class BasePatchTest(unittest.TestCase):
         from agent_cleaner.agents import base
 
         self.tmp = Path(tempfile.mkdtemp(prefix="agent_cleaner_test_"))
+        self._env_backup = {k: os.environ.get(k) for k in self._ENV_VARS}
+        os.environ["APPDATA"] = str(self.tmp / "appdata")  # 隔离真实 config.json
+        for k in self._ENV_VARS:
+            if k != "APPDATA":
+                os.environ.pop(k, None)  # 清空真实环境变量
         self._patches = []
         for attr in ("home_dir", "appdata_dir", "local_share_dir"):
             # 用 __dict__ 保存 staticmethod 描述符本身；
@@ -85,6 +104,11 @@ class BasePatchTest(unittest.TestCase):
 
         for cls, attr, orig in self._patches:
             setattr(cls, attr, orig)
+        for k, v in self._env_backup.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
         shutil.rmtree(self.tmp, ignore_errors=True)
 
 

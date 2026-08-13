@@ -12,7 +12,8 @@ from __future__ import annotations
 import threading
 import time
 import tkinter as tk
-from tkinter import messagebox, ttk
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
 
 from .cleaner import CleanResult, clean, filter_by_days, merge_selected, preview
 from . import config
@@ -329,19 +330,19 @@ class App(tk.Tk):
     # ---------- 设置对话框 ----------
 
     def _open_settings(self) -> None:
-        """设置对话框：查看/编辑每个 Agent 的数据路径覆盖（写入 config.json）。"""
+        """设置对话框：查看/编辑每个 Agent 的数据路径覆盖（即时保存，关闭时重扫）。"""
         win = tk.Toplevel(self)
         win.title("设置 - Agent 数据路径")
         win.transient(self)
-        win.geometry("580x520")
+        win.geometry("600x520")
+
         ttk.Label(
             win,
             text="为每个 Agent 指定数据目录（留空 = 使用默认路径 / 环境变量路径）",
-        ).pack(padx=12, pady=(10, 6), anchor="w")
+        ).pack(padx=12, pady=(10, 4), anchor="w")
         ttk.Label(
             win,
-            text="说明：Agent 官方环境变量（如 CLAUDE_CONFIG_DIR、QWEN_HOME）会自动识别；\n"
-            "此处填写的是最高优先级的手动覆盖。",
+            text="点\"浏览\"选择目录、\"清除\"恢复默认；修改即时保存，关闭后自动重新扫描",
             foreground="#666666",
         ).pack(padx=12, pady=(0, 6), anchor="w")
 
@@ -356,26 +357,60 @@ class App(tk.Tk):
         sb.pack(side="right", fill="y")
 
         entries: dict[str, tk.StringVar] = {}
+
+        def choose_dir(agent_id: str, var: tk.StringVar) -> None:
+            """目录选择器选中后立即保存该 Agent 的覆盖路径。"""
+            d = filedialog.askdirectory(
+                parent=win,
+                title=f"选择 {agent_id} 的数据目录",
+                initialdir=var.get() or str(Path.home()),
+            )
+            if d:
+                var.set(d)
+                config.set_agent_path(agent_id, d)  # 即时保存
+
+        def clear_path(agent_id: str, var: tk.StringVar) -> None:
+            """清空覆盖路径（恢复默认/环境变量），即时生效。"""
+            var.set("")
+            config.set_agent_path(agent_id, None)
+
+        def popup_menu(event, agent_id: str, var: tk.StringVar) -> None:
+            menu = tk.Menu(win, tearoff=0)
+            menu.add_command(label="选择目录…", command=lambda: choose_dir(agent_id, var))
+            menu.add_command(label="清空路径", command=lambda: clear_path(agent_id, var))
+            menu.tk_popup(event.x_root, event.y_root)
+            menu.grab_release()
+
         for agent in all_agents():
             row = ttk.Frame(frame)
             row.pack(fill="x", padx=6, pady=3)
-            ttk.Label(row, text=f"{agent.display} ({agent.id})", width=24).pack(side="left")
+            ttk.Label(row, text=f"{agent.display} ({agent.id})", width=22).pack(side="left")
             var = tk.StringVar(value=config.get_agent_path(agent.id) or "")
             entries[agent.id] = var
-            ttk.Entry(row, textvariable=var).pack(side="left", fill="x", expand=True)
+            entry = ttk.Entry(row, textvariable=var)
+            entry.pack(side="left", fill="x", expand=True)
+            entry.bind("<Double-1>", lambda _e, a=agent.id, v=var: choose_dir(a, v))
+            entry.bind("<Button-3>", lambda e, a=agent.id, v=var: popup_menu(e, a, v))
+            entry.bind("<Button-2>", lambda e, a=agent.id, v=var: popup_menu(e, a, v))
+            ttk.Button(
+                row, text="浏览", width=5,
+                command=lambda a=agent.id, v=var: choose_dir(a, v),
+            ).pack(side="left", padx=(4, 2))
+            ttk.Button(
+                row, text="清除", width=5,
+                command=lambda a=agent.id, v=var: clear_path(a, v),
+            ).pack(side="left")
 
-        def save() -> None:
+        def on_close() -> None:
+            """关闭：手打的路径落盘 + 重新扫描。"""
             for aid, var in entries.items():
                 val = var.get().strip()
                 config.set_agent_path(aid, val or None)
             win.destroy()
             self.do_scan()
-            messagebox.showinfo("已保存", "路径配置已保存，已重新扫描。")
 
-        bar = ttk.Frame(win)
-        bar.pack(fill="x", padx=12, pady=10)
-        ttk.Button(bar, text="保存并重新扫描", command=save).pack(side="left")
-        ttk.Button(bar, text="关闭", command=win.destroy).pack(side="left", padx=6)
+        # 修改即时保存：点右上角 X 关闭时落盘手打路径并重新扫描
+        win.protocol("WM_DELETE_WINDOW", on_close)
 
     # ---------- 右键菜单 ----------
 
