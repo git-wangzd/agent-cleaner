@@ -34,6 +34,7 @@ from agent_cleaner.agents.qwen import QwenAgent
 from agent_cleaner.agents.trae import TraeAgent
 from agent_cleaner.agents.windsurf import WindsurfAgent
 from agent_cleaner.cleaner import (
+    backup_sessions,
     filter_by_days,
     filter_by_project,
     filter_by_search,
@@ -42,6 +43,7 @@ from agent_cleaner.cleaner import (
     quick_clean_target,
 )
 from agent_cleaner.logs import get_logger
+from agent_cleaner.updater import check_latest, is_newer
 from agent_cleaner.models import AgentReport, Session, human_size
 from agent_cleaner.scanner import scan_all, summary_line
 from agent_cleaner.trash import _parse_sqlite_path
@@ -640,6 +642,83 @@ class LoggerTest(unittest.TestCase):
             else:
                 os.environ["APPDATA"] = old_appdata
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+class BackupTest(unittest.TestCase):
+    """永久删除前自动备份：zip 打包、清单、SQLite 会话标注跳过。"""
+
+    def test_backup_zip_with_manifest(self):
+        import shutil
+        import tempfile
+        import zipfile
+
+        from agent_cleaner.cleaner import backup_sessions
+
+        tmp = Path(tempfile.mkdtemp(prefix="backup_test_"))
+        try:
+            # 一个文件会话 + 一个目录会话 + 一个 sqlite 会话
+            f = tmp / "sess-a.jsonl"
+            f.write_text("hello", encoding="utf-8")
+            d = tmp / "sess-b"
+            d.mkdir()
+            (d / "m1.json").write_text("{}", encoding="utf-8")
+            (d / "sub").mkdir()
+            (d / "sub" / "m2.json").write_text("[]", encoding="utf-8")
+
+            sessions = [
+                Session(agent="x", name="会话A", path=str(f), size=5, modified=0, is_dir=False),
+                Session(agent="x", name="会话B", path=str(d), size=10, modified=0, is_dir=True),
+                Session(agent="opencode", name="SQLite会话", path="sqlite://C:/db/opencode.db#sid1", size=1, modified=0, is_dir=False),
+            ]
+            out_dir = tmp / "backups"
+            zip_path = backup_sessions(sessions, str(out_dir))
+            self.assertTrue(Path(zip_path).is_file())
+
+            with zipfile.ZipFile(zip_path) as zf:
+                names = zf.namelist()
+                self.assertTrue(any("会话A.jsonl" in n for n in names))
+                self.assertTrue(any("会话B/m1.json" in n for n in names))
+                self.assertTrue(any("会话B/sub/m2.json" in n for n in names))
+                manifest = zf.read("manifest.txt").decode("utf-8")
+                self.assertIn("已备份: 会话A", manifest)
+                self.assertIn("跳过：数据库内会话", manifest)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_backup_dir_created(self):
+        import shutil
+        import tempfile
+
+        tmp = Path(tempfile.mkdtemp(prefix="backup_test_"))
+        try:
+            f = tmp / "a.jsonl"
+            f.write_text("x", encoding="utf-8")
+            sessions = [Session(agent="x", name="a", path=str(f), size=1, modified=0, is_dir=False)]
+            zip_path = backup_sessions(sessions, str(tmp / "nested" / "dir"))
+            self.assertTrue(Path(zip_path).is_file())
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+class UpdaterTest(unittest.TestCase):
+    """版本号比较与版本检查。"""
+
+    def test_is_newer(self):
+        self.assertTrue(is_newer("v1.1.0", "1.0.0"))
+        self.assertTrue(is_newer("1.0.1", "1.0.0"))
+        self.assertFalse(is_newer("v1.0.0", "1.0.0"))
+        self.assertFalse(is_newer("0.9.0", "1.0.0"))
+        self.assertFalse(is_newer("1.0.0", "1.0.1"))
+
+    def test_check_latest_invalid_repo(self):
+        # 仓库格式不合法或网络失败 → 返回 None（不抛异常）
+        self.assertIsNone(check_latest(""))
+        self.assertIsNone(check_latest("not-a-repo"))
+
+    def test_check_latest_no_network_returns_none(self):
+        # 网络不可达时不应崩溃，返回 None
+        result = check_latest("nonexistent-owner-xyz/nonexistent-repo-xyz", timeout=3)
+        self.assertTrue(result is None or isinstance(result, str))
 
 
 class FilterByDaysTest(unittest.TestCase):
