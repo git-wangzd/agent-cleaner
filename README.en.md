@@ -19,10 +19,11 @@ Built with pure Python standard library + Tkinter, zero third-party dependencies
 - 🧹 Sessions and auxiliary data (cache/logs) cleaned separately; auxiliary data unchecked by default
 - ⏱️ Time filter: show only sessions inactive for 7 / 30 / 90+ days
 - 📂 Project filter + 🔍 session search: quickly locate by project / keyword
-- 🚀 One-click cleanup: clear old sessions of all agents by day range
+- 🚀 One-click cleanup: pick a day range in a dialog (default 30 days) to clear old sessions of all agents
 - 🔁 Invert selection: quickly flip checkbox states
 - ⚙️ Custom paths: auto-detect official env vars + manual config in settings UI (directory picker)
 - 📊 Background-thread scanning / cleaning with real-time progress; UI never freezes
+- 📜 Clean history: view / clear a summary of past cleanups in Settings
 - 🔍 Double-click a session for details; right-click to open its storage folder
 - 🔄 Update check on startup / manually (GitHub Releases)
 - 📦 Three-platform auto build & release (GitHub Actions)
@@ -42,6 +43,10 @@ Download the installer for your platform from [GitHub Releases](https://github.c
 ```bash
 python main.py          # launch the GUI
 python main.py --list   # CLI mode: print scan results only
+# Headless cleanup (schedule it with cron / Task Scheduler):
+python main.py --clean 30                    # clean sessions inactive > 30 days (to recycle bin)
+python main.py --clean 30 --permanent --yes  # permanent delete (requires explicit --yes)
+python main.py --clean 30 --quiet            # quiet mode, no progress output
 ```
 
 ## 🤖 Supported Agents

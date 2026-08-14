@@ -27,6 +27,7 @@ from .cleaner import (
     quick_clean_target,
 )
 from . import __version__, config
+from .history import clear_history, read_history
 from .logs import get_logger
 from .models import AgentReport, Session, human_size
 from .registry import all_agents
@@ -111,7 +112,7 @@ class App(tk.Tk):
         self.control_buttons += [b1, b2]
         cols = ("check", "agent", "sessions", "aux", "size", "storage")
         self.tree_agents = ttk.Treeview(top_frame, columns=cols, show="headings", height=5)
-        headers = (("check", 34, ""), ("agent", 150, "Agent"), ("sessions", 55, "会话"), ("aux", 55, "附属"), ("size", 105, "总大小"), ("storage", 370, "存储位置"))
+        headers = (("check", 34, ""), ("agent", 150, "Agent"), ("sessions", 55, "会话"), ("aux", 55, "附属"), ("size", 105, "总大小"), ("storage", 220, "存储位置"))
         for cid, w, txt in headers:
             align = "center" if cid in ("check", "sessions", "aux") else "w"
             self.tree_agents.heading(cid, text=txt, anchor=align)
@@ -177,6 +178,15 @@ class App(tk.Tk):
         b6 = ttk.Button(bottom, text="永久删除", command=lambda: self._do_clean(permanent=True))
         b6.pack(side="right", padx=6)
         self.control_buttons += [b5, b6]
+
+    # ---------- 弹窗辅助 ----------
+
+    def _center_window(self, win: tk.Toplevel) -> None:
+        """把 Toplevel 弹窗居中显示在主窗口中央。"""
+        win.update_idletasks()
+        x = self.winfo_rootx() + max((self.winfo_width() - win.winfo_width()) // 2, 0)
+        y = self.winfo_rooty() + max((self.winfo_height() - win.winfo_height()) // 2, 0)
+        win.geometry(f"+{x}+{y}")
 
     # ---------- 线程通信 ----------
 
@@ -245,14 +255,19 @@ class App(tk.Tk):
 
     def _refresh_agents(self) -> None:
         self.tree_agents.delete(*self.tree_agents.get_children())
+        # 先收集行数据，再按显示的总大小降序排列（占用最大的 Agent 排最前）
+        rows: list[tuple[int, AgentReport, int, int, int]] = []
         for r in self.reports:
-            checked = r.agent in self.checked_agents
-            mark = CHECK if checked else UNCHECK
-            tags = (CHECKED_TAG,) if checked else ()
             shown = self._filter_sessions(r.sessions)
             session_n = len([s for s in shown if s.kind != "aux"])
             aux_n = len([s for s in shown if s.kind == "aux"])
             size = sum(s.size for s in shown)
+            rows.append((size, r, session_n, aux_n, size))
+        rows.sort(key=lambda t: t[0], reverse=True)
+        for _size, r, session_n, aux_n, size in rows:
+            checked = r.agent in self.checked_agents
+            mark = CHECK if checked else UNCHECK
+            tags = (CHECKED_TAG,) if checked else ()
             self.tree_agents.insert("", "end", iid=r.agent, values=(mark, r.display, session_n, aux_n, human_size(size), r.storage_path), tags=tags)
         # 默认选中第一个有会话的 Agent
         first = next((r.agent for r in self.reports if r.sessions), None)
@@ -427,6 +442,7 @@ class App(tk.Tk):
         ttk.Button(win, text="关闭", command=win.destroy).grid(
             row=len(rows), column=0, columnspan=2, pady=12
         )
+        self._center_window(win)
 
     # ---------- 版本检查 ----------
 
@@ -492,6 +508,7 @@ class App(tk.Tk):
         ttk.Label(thr_row, text="大文件标红阈值 (MB):").pack(side="left")
         thr_var = tk.StringVar(value=str(config.get_big_file_mb()))
         ttk.Entry(thr_row, textvariable=thr_var, width=8).pack(side="left", padx=(4, 0))
+        ttk.Button(thr_row, text="查看清理记录", command=self._show_history).pack(side="right")
 
         # 滚动区（Agent 数量多时窗口放不下）
         canvas = tk.Canvas(win, highlightthickness=0)
@@ -562,6 +579,43 @@ class App(tk.Tk):
 
         # 修改即时保存：点右上角 X 关闭时落盘手打路径并重新扫描
         win.protocol("WM_DELETE_WINDOW", on_close)
+        self._center_window(win)
+
+    def _show_history(self) -> None:
+        """查看清理记录：列出最近记录（新的在前）+ 清空按钮。"""
+        win = tk.Toplevel(self)
+        win.title("清理记录")
+        win.transient(self)
+        win.geometry("560x420")
+        win.resizable(False, False)
+
+        ttk.Label(win, text="最近清理记录（只记摘要，不含具体路径）：").pack(padx=12, pady=(10, 4), anchor="w")
+        txt = tk.Text(win, height=14, state="disabled", wrap="none")
+        txt.pack(fill="both", expand=True, padx=12, pady=(0, 6))
+        sb = ttk.Scrollbar(win, command=txt.yview)
+        sb.pack(side="right", fill="y")
+        txt.configure(yscrollcommand=sb.set)
+
+        def refresh() -> None:
+            entries = read_history(limit=50)
+            txt.configure(state="normal")
+            txt.delete("1.0", "end")
+            if not entries:
+                txt.insert("1.0", "还没有任何清理记录。")
+            for e in entries:
+                mode = "永久删除" if e.get("mode") == "permanent" else "回收站"
+                ts = time.strftime("%Y-%m-%d %H:%M", time.localtime(e.get("ts", 0)))
+                agents = "、".join(e.get("agents", [])[:8]) or "—"
+                txt.insert("end", f"{ts}  {mode}  成功 {e.get('count', 0)} 个  约释放 {human_size(e.get('freed', 0))}  [{agents}]\n")
+            txt.configure(state="disabled")
+
+        refresh()
+        btns = ttk.Frame(win)
+        btns.pack(fill="x", padx=12, pady=(0, 10))
+        ttk.Button(btns, text="清空记录", command=lambda: (clear_history(), refresh())).pack(side="right")
+        ttk.Button(btns, text="关闭", command=win.destroy).pack(side="right", padx=(0, 8))
+
+        self._center_window(win)
 
     # ---------- 项目筛选 ----------
 
@@ -682,24 +736,80 @@ class App(tk.Tk):
         self._run_clean(selected, permanent)
 
     def _quick_clean(self) -> None:
-        """一键清理：按顶部时间筛选的天数，清理所有 Agent 中更早的旧会话（不含附属数据）。"""
-        days = self.filter_days
-        if not days:
-            messagebox.showinfo("提示", "请先在顶部选择时间（如 90 天）——一键清理会清掉更早的旧会话。")
-            return
-        target = quick_clean_target(self.reports, days)
-        if not target:
-            messagebox.showinfo("提示", f"没有超过 {days} 天未活动的旧会话。")
-            return
-        total = sum(s.size for s in target)
-        ok = messagebox.askyesno(
-            "一键清理确认",
-            f"将清理所有 Agent 中超过 {days} 天未活动的 {len(target)} 个旧会话（约 {human_size(total)}），\n"
-            "移入回收站（可恢复）。",
+        """一键清理：弹窗选择天数，清理所有 Agent 中更早的旧会话（不含附属数据）。
+
+        与顶部时间筛选解耦——顶部筛选只管显示，一键清理的天数在这里单独选（默认 30 天）。
+        """
+        win = tk.Toplevel(self)
+        win.title("一键清理")
+        win.transient(self)
+        win.geometry("430x210")
+        win.resizable(False, False)
+
+        ttk.Label(
+            win,
+            text="清理所有 Agent 中超过指定天数未活动的旧会话（移入回收站，可恢复）：",
+            wraplength=390,
+        ).pack(padx=14, pady=(12, 8), anchor="w")
+
+        row = ttk.Frame(win)
+        row.pack(fill="x", padx=14, pady=4)
+        ttk.Label(row, text="清理超过:").pack(side="left")
+        day_var = tk.StringVar(value="30")
+        cmb = ttk.Combobox(
+            row, textvariable=day_var, values=["7", "30", "90", "180", "365"],
+            state="readonly", width=6,
         )
-        if not ok:
-            return
-        self._run_clean(target, permanent=False)
+        cmb.pack(side="left", padx=(4, 0))
+        ttk.Label(row, text="天未活动的旧会话").pack(side="left")
+
+        # 预估预览：随天数变化实时刷新，让用户先看到规模再决定
+        lbl_preview = ttk.Label(win, text="", foreground="#666666")
+        lbl_preview.pack(padx=14, pady=4, anchor="w")
+
+        def update_preview(_event=None) -> None:
+            try:
+                days = int(day_var.get())
+            except ValueError:
+                return
+            target = quick_clean_target(self.reports, days)
+            if target:
+                total = sum(s.size for s in target)
+                lbl_preview.config(text=f"将清理 {len(target)} 个旧会话（约 {human_size(total)}）")
+            else:
+                lbl_preview.config(text=f"没有超过 {days} 天未活动的旧会话。")
+
+        cmb.bind("<<ComboboxSelected>>", update_preview)
+        update_preview()
+
+        def confirm() -> None:
+            try:
+                days = int(day_var.get())
+            except ValueError:
+                return
+            target = quick_clean_target(self.reports, days)
+            if not target:
+                messagebox.showinfo("提示", f"没有超过 {days} 天未活动的旧会话。", parent=win)
+                return
+            total = sum(s.size for s in target)
+            ok = messagebox.askyesno(
+                "一键清理确认",
+                f"将清理所有 Agent 中超过 {days} 天未活动的 {len(target)} 个旧会话（约 {human_size(total)}），\n"
+                "移入回收站（可恢复）。",
+                parent=win,
+            )
+            if not ok:
+                return
+            win.destroy()
+            self._run_clean(target, permanent=False)
+
+        btns = ttk.Frame(win)
+        btns.pack(side="bottom", fill="x", padx=14, pady=(8, 12))
+        ttk.Button(btns, text="取消", command=win.destroy).pack(side="right")
+        ttk.Button(btns, text="清理", command=confirm).pack(side="right", padx=(0, 6))
+
+        self._center_window(win)
+        win.grab_set()
 
     def _run_clean(self, sessions: list[Session], permanent: bool) -> None:
         """后台线程执行清理（进度条 + 按钮禁用 + 异常兜底），供勾选清理与一键清理复用。"""

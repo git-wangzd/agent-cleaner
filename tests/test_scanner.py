@@ -19,6 +19,7 @@ import sqlite3
 import shutil
 import tempfile
 import os
+from unittest import mock
 
 from agent_cleaner import models
 from agent_cleaner.agents.atomcode import AtomCodeAgent
@@ -882,6 +883,14 @@ class FilterByDaysTest(unittest.TestCase):
 class ProgressCallbackTest(unittest.TestCase):
     """clean() 的进度回调：每删一个会话调用一次，done 从 1 递增。"""
 
+    def setUp(self):
+        # clean() 现在会写清理历史，测试里屏蔽，避免污染真实配置目录
+        self._record_patch = mock.patch("agent_cleaner.cleaner.record_clean")
+        self._record_patch.start()
+
+    def tearDown(self):
+        self._record_patch.stop()
+
     def _make_sessions(self, tmp: Path, n: int) -> list[Session]:
         out = []
         for i in range(n):
@@ -921,6 +930,13 @@ class ProgressCallbackTest(unittest.TestCase):
 
 class BatchFailureTest(unittest.TestCase):
     """批量删除中单个会话失败不应中断整体。"""
+
+    def setUp(self):
+        self._record_patch = mock.patch("agent_cleaner.cleaner.record_clean")
+        self._record_patch.start()
+
+    def tearDown(self):
+        self._record_patch.stop()
 
     def test_failed_session_does_not_stop_batch(self):
         tmp = Path(tempfile.mkdtemp(prefix="batch_test_"))
@@ -1016,6 +1032,146 @@ class MergeSelectedTest(unittest.TestCase):
     def test_nothing_selected(self):
         out = merge_selected(self.reports, checked_agents=set(), checked_paths=set())
         self.assertEqual(out, [])
+
+
+class HistoryTest(unittest.TestCase):
+    """清理历史：record_clean / read_history / clear_history。"""
+
+    def test_record_read_clear(self):
+        from agent_cleaner.history import clear_history, read_history, record_clean
+
+        tmp = Path(tempfile.mkdtemp(prefix="history_test_"))
+        old_appdata = os.environ.get("APPDATA")
+        os.environ["APPDATA"] = str(tmp)
+        try:
+            clear_history()
+            self.assertEqual(read_history(), [])
+            record_clean("trash", 2, 100, ["claude", "cursor"])
+            record_clean("permanent", 1, 500, ["codex"])
+            entries = read_history()
+            self.assertEqual(len(entries), 2)
+            self.assertEqual(entries[0]["mode"], "permanent")  # 新的在前
+            self.assertEqual(entries[0]["count"], 1)
+            self.assertEqual(entries[1]["agents"], ["claude", "cursor"])  # 去重排序
+            clear_history()
+            self.assertEqual(read_history(), [])
+        finally:
+            if old_appdata is None:
+                os.environ.pop("APPDATA", None)
+            else:
+                os.environ["APPDATA"] = old_appdata
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_read_history_ignores_corrupt_lines(self):
+        from agent_cleaner.history import read_history
+
+        tmp = Path(tempfile.mkdtemp(prefix="history_test_"))
+        old_appdata = os.environ.get("APPDATA")
+        os.environ["APPDATA"] = str(tmp)
+        try:
+            p = tmp / "agent-cleaner" / "history.jsonl"
+            p.parent.mkdir(parents=True)
+            p.write_text(
+                '{"mode": "trash", "count": 1, "freed": 1, "agents": ["claude"], "ts": 1}\nnot-json\n',
+                encoding="utf-8",
+            )
+            entries = read_history()
+            self.assertEqual(len(entries), 1)
+            self.assertEqual(entries[0]["count"], 1)
+        finally:
+            if old_appdata is None:
+                os.environ.pop("APPDATA", None)
+            else:
+                os.environ["APPDATA"] = old_appdata
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_trim_keeps_last_max_entries(self):
+        from agent_cleaner.history import MAX_ENTRIES, read_history, record_clean
+
+        tmp = Path(tempfile.mkdtemp(prefix="history_test_"))
+        old_appdata = os.environ.get("APPDATA")
+        os.environ["APPDATA"] = str(tmp)
+        try:
+            for i in range(MAX_ENTRIES + 10):
+                record_clean("trash", i, 1, ["claude"])
+            entries = read_history(limit=MAX_ENTRIES + 50)
+            self.assertEqual(len(entries), MAX_ENTRIES)
+        finally:
+            if old_appdata is None:
+                os.environ.pop("APPDATA", None)
+            else:
+                os.environ["APPDATA"] = old_appdata
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+class CleanCliTest(unittest.TestCase):
+    """无头清理 CLI：main.run_clean_cli 的退出码与参数传递。"""
+
+    def _report(self) -> AgentReport:
+        import time
+
+        now = time.time()
+        day = 86400
+        return AgentReport(
+            agent="claude",
+            display="Claude Code",
+            storage_path="~/.claude",
+            sessions=[
+                Session(agent="claude", name="old", path="/o/1.jsonl", size=100, modified=now - 30 * day, is_dir=False),
+                Session(agent="claude", name="recent", path="/r/1.jsonl", size=100, modified=now - 1 * day, is_dir=False),
+            ],
+        )
+
+    def test_permanent_requires_yes(self):
+        from main import run_clean_cli
+
+        rc = run_clean_cli(7, permanent=True, quiet=True)
+        self.assertEqual(rc, 1)
+
+    def test_trash_clean_success(self):
+        from agent_cleaner.cleaner import CleanResult
+        from main import run_clean_cli
+
+        with mock.patch("agent_cleaner.scanner.scan_all", return_value=[self._report()]), mock.patch(
+            "agent_cleaner.cleaner.clean", return_value=CleanResult(ok=["/o/1.jsonl"], freed=100)
+        ) as m_clean:
+            rc = run_clean_cli(7, quiet=True)
+        self.assertEqual(rc, 0)
+        m_clean.assert_called_once()
+        args = m_clean.call_args
+        self.assertFalse(args.kwargs["permanent"])
+        self.assertEqual(len(args.args[0]), 1)  # 只含 30 天前的旧会话，不含 1 天前的
+
+    def test_permanent_with_yes(self):
+        from agent_cleaner.cleaner import CleanResult
+        from main import run_clean_cli
+
+        with mock.patch("agent_cleaner.scanner.scan_all", return_value=[self._report()]), mock.patch(
+            "agent_cleaner.cleaner.clean", return_value=CleanResult(ok=["/o/1.jsonl"], freed=100)
+        ) as m_clean:
+            rc = run_clean_cli(7, permanent=True, yes=True, quiet=True)
+        self.assertEqual(rc, 0)
+        self.assertTrue(m_clean.call_args.kwargs["permanent"])
+
+    def test_nothing_to_clean_returns_0(self):
+        from main import run_clean_cli
+
+        with mock.patch("agent_cleaner.scanner.scan_all", return_value=[self._report()]), mock.patch(
+            "agent_cleaner.cleaner.clean"
+        ) as m_clean:
+            rc = run_clean_cli(365, quiet=True)  # 会话只有 30 天前，没有超过 365 天的
+        self.assertEqual(rc, 0)
+        m_clean.assert_not_called()
+
+    def test_failed_clean_returns_2(self):
+        from agent_cleaner.cleaner import CleanResult
+        from main import run_clean_cli
+
+        with mock.patch("agent_cleaner.scanner.scan_all", return_value=[self._report()]), mock.patch(
+            "agent_cleaner.cleaner.clean", return_value=CleanResult(failed=["x"])
+        ):
+            rc = run_clean_cli(7, quiet=True)
+        self.assertEqual(rc, 2)
 
 
 if __name__ == "__main__":

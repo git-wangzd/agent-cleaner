@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from .models import AgentReport, Session, human_size
 from .trash import delete_sessions
 from .logs import get_logger
+from .history import record_clean
 
 
 def filter_by_days(sessions: list[Session], days: int | None) -> list[Session]:
@@ -114,4 +115,11 @@ def clean(sessions: list[Session], permanent: bool = False, progress=None) -> Cl
         get_logger().warning("批量清理失败 %d/%d 个", len(failed), len(sessions))
         for msg in failed:
             get_logger().warning("  %s", msg)
+    if ok:  # 清理成功后记录历史（只记摘要，不记路径）
+        record_clean(
+            mode="permanent" if permanent else "trash",
+            count=len(ok),
+            freed=freed,
+            agents=[s.agent for s in sessions],
+        )
     return CleanResult(permanent=permanent, ok=ok, failed=failed, freed=freed)
