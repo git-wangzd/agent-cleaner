@@ -3,7 +3,7 @@
 > [English](README.en.md) | 中文
 
 ![CI](https://github.com/git-wangzd/agent-cleaner/actions/workflows/build.yml/badge.svg)
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.1.0-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
