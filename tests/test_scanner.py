@@ -1073,6 +1073,39 @@ class SqliteMissingTableTest(BasePatchTest):
         con.close()
 
 
+class ZCodeDeleteTest(BasePatchTest):
+    """ZCode db 删除会话时同步清理 model_usage / tool_usage 关联行。"""
+
+    def test_deletes_related_rows(self):
+        from agent_cleaner.trash import delete_session
+
+        db = self.tmp / ".zcode" / "cli" / "db" / "db.sqlite"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        con = sqlite3.connect(str(db))
+        con.executescript(
+            """
+            CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT NOT NULL);
+            CREATE TABLE model_usage (id TEXT PRIMARY KEY, session_id TEXT NOT NULL);
+            CREATE TABLE tool_usage (session_id TEXT NOT NULL, turn_id TEXT);
+            INSERT INTO session VALUES ('sess-1', 'D:/code/myapp');
+            INSERT INTO model_usage VALUES ('mu1', 'sess-1');
+            INSERT INTO tool_usage VALUES ('sess-1', 't1');
+            """
+        )
+        con.commit()
+        con.close()
+
+        s = Session(agent="zcode", name="t", path=f"sqlite://{db}#sess-1",
+                    size=0, modified=0, is_dir=False)
+        delete_session(s)
+
+        con = sqlite3.connect(str(db))
+        self.assertEqual(con.execute("SELECT COUNT(*) FROM session").fetchone()[0], 0)
+        self.assertEqual(con.execute("SELECT COUNT(*) FROM model_usage").fetchone()[0], 0)
+        self.assertEqual(con.execute("SELECT COUNT(*) FROM tool_usage").fetchone()[0], 0)
+        con.close()
+
+
 def make_session_obj(agent: str, path: str, size: int = 100) -> Session:
     return Session(agent=agent, name=path.split("/")[-1], path=path, size=size, modified=0, is_dir=False)
 

@@ -166,6 +166,8 @@ _SQLITE_SESSION_TABLES = (
     "session_context_epoch",
     "session_input",
     "session_share",
+    "model_usage",  # ZCode：token 用量统计
+    "tool_usage",   # ZCode：工具调用记录
 )
 
 
