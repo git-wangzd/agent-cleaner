@@ -702,10 +702,11 @@ class RegistryTest(unittest.TestCase):
 
         agents = all_agents()
         ids = {a.id for a in agents}
-        # 原有 14 个 + AtomCode + MimoCode = 16
-        self.assertEqual(len(ids), 16)
+        # 原有 16 个 + ZCode = 17
+        self.assertEqual(len(ids), 17)
         self.assertIn("atomcode", ids)
         self.assertIn("mimocode", ids)
+        self.assertIn("zcode", ids)
 
 
 class EnvVarTest(unittest.TestCase):

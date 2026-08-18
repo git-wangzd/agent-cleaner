@@ -19,6 +19,7 @@ from .agents.pi import PiAgent
 from .agents.qwen import QwenAgent
 from .agents.trae import TraeAgent
 from .agents.windsurf import WindsurfAgent
+from .agents.zcode import ZCodeAgent
 
 
 def all_agents() -> list[Agent]:
@@ -40,6 +41,7 @@ def all_agents() -> list[Agent]:
         QwenAgent(),
         TraeAgent(),
         WindsurfAgent(),
+        ZCodeAgent(),
     ]
     return sorted(agents, key=lambda a: a.display)
 
