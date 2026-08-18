@@ -37,6 +37,7 @@ from agent_cleaner.agents.pi import PiAgent
 from agent_cleaner.agents.qwen import QwenAgent
 from agent_cleaner.agents.trae import TraeAgent
 from agent_cleaner.agents.windsurf import WindsurfAgent
+from agent_cleaner.agents.zcode import ZCodeAgent
 from agent_cleaner.cleaner import (
     filter_by_days,
     filter_by_project,
@@ -87,6 +88,7 @@ class BasePatchTest(unittest.TestCase):
         "PI_CODING_AGENT_DIR",
         "PI_CODING_AGENT_SESSION_DIR",
         "XDG_DATA_HOME",
+        "ZCODE_STORAGE_DIR",
     )
 
     def setUp(self):
@@ -607,6 +609,91 @@ class MimoCodeScanTest(BasePatchTest):
     def test_no_db_not_detected(self):
         agent = MimoCodeAgent()
         self.assertFalse(agent.detect())
+
+
+class ZCodeScanTest(BasePatchTest):
+    """ZCode 会话扫描：cli/db/db.sqlite（SQLite，防御式列探测）。"""
+
+    def _make_db(self) -> Path:
+        db = self.tmp / ".zcode" / "cli" / "db" / "db.sqlite"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        con = sqlite3.connect(str(db))
+        con.executescript(
+            """
+            CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT NOT NULL,
+                                  title TEXT, updated_at REAL);
+            CREATE TABLE model_usage (id TEXT PRIMARY KEY, session_id TEXT NOT NULL,
+                                      model_id TEXT, started_at INTEGER);
+            CREATE TABLE tool_usage (session_id TEXT NOT NULL, turn_id TEXT,
+                                     tool_name TEXT, started_at INTEGER);
+            INSERT INTO session VALUES ('sess-1', 'D:/code/myapp', '修bug', 1750000000);
+            INSERT INTO model_usage VALUES ('mu1', 'sess-1', 'glm-5.2', 1750000000);
+            INSERT INTO tool_usage VALUES ('sess-1', 't1', 'bash', 1750000000);
+            """
+        )
+        con.commit()
+        con.close()
+        return db
+
+    def test_detect(self):
+        self.assertFalse(ZCodeAgent().detect())
+        self._make_db()
+        self.assertTrue(ZCodeAgent().detect())
+
+    def test_sqlite_sessions(self):
+        self._make_db()
+        agent = ZCodeAgent()
+        sessions = agent.scan()
+        self.assertEqual(len(sessions), 1)
+        s = sessions[0]
+        self.assertTrue(s.path.startswith("sqlite://"))
+        self.assertEqual(s.project, "myapp")      # directory 的目录名
+        self.assertIn("myapp", s.name)
+        self.assertIn("修bug", s.name)            # title 列
+        self.assertEqual(s.size, 0)               # session 表无大小数据源
+        self.assertEqual(s.modified, 1750000000)  # updated_at（秒）
+
+    def test_aux_exec(self):
+        make_session(self.tmp / ".zcode" / "cli" / "exec" / "abc" / "out.txt", "x")
+        agent = ZCodeAgent()
+        sessions = agent.scan()
+        aux = [s for s in sessions if s.kind == "aux"]
+        self.assertEqual(len(aux), 1)
+        self.assertEqual(aux[0].name, "终端输出缓存 exec")
+        self.assertTrue(aux[0].is_dir)
+
+    def test_missing_columns_no_crash(self):
+        # 只有最小列（id/directory）也能扫；时间/标题列缺失用回退值
+        db = self.tmp / ".zcode" / "cli" / "db" / "db.sqlite"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        con = sqlite3.connect(str(db))
+        con.executescript(
+            """
+            CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT NOT NULL);
+            INSERT INTO session VALUES ('sess-2', '/repo/min');
+            """
+        )
+        con.commit()
+        con.close()
+        sessions = ZCodeAgent().scan()
+        self.assertEqual(len(sessions), 1)
+        self.assertEqual(sessions[0].project, "min")
+        self.assertEqual(sessions[0].modified, 0)
+
+    def test_no_session_table_no_crash(self):
+        db = self.tmp / ".zcode" / "cli" / "db" / "db.sqlite"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        con = sqlite3.connect(str(db))
+        con.execute("CREATE TABLE other (x TEXT)")
+        con.commit()
+        con.close()
+        self.assertEqual(ZCodeAgent().scan(), [])
+
+    def test_env_var_override(self):
+        os.environ["ZCODE_STORAGE_DIR"] = str(self.tmp / "zdata")
+        agent = ZCodeAgent()
+        self.assertEqual(str(agent.root), os.environ["ZCODE_STORAGE_DIR"])
+        os.environ.pop("ZCODE_STORAGE_DIR", None)
 
 
 class RegistryTest(unittest.TestCase):
