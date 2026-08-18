@@ -10,4 +10,4 @@ Gemini CLI、Continue、Cline 等）在本机累积的会话数据。
 - 删除前先扫描预览，由用户勾选要清理的会话
 """
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"

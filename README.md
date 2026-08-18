@@ -3,7 +3,7 @@
 > [English](README.en.md) | 中文
 
 ![CI](https://github.com/git-wangzd/agent-cleaner/actions/workflows/build.yml/badge.svg)
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -118,7 +118,7 @@ A：不会，弹窗只提示数量与预计释放空间。
 欢迎提交 Issue 和 Pull Request：
 
 ```bash
-python -m unittest discover -s tests   # 运行单元测试（75 个）
+python -m unittest discover -s tests   # 运行单元测试（91 个）
 python smoke_test.py                    # GUI 冒烟测试
 ```
 

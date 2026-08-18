@@ -3,7 +3,7 @@
 > English | [中文](README.md)
 
 ![CI](https://github.com/git-wangzd/agent-cleaner/actions/workflows/build.yml/badge.svg)
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -118,7 +118,7 @@ A: No — it only shows the count and estimated space to be freed.
 Issues and Pull Requests are welcome:
 
 ```bash
-python -m unittest discover -s tests   # run unit tests (75)
+python -m unittest discover -s tests   # run unit tests (91)
 python smoke_test.py                    # GUI smoke test
 ```
 
