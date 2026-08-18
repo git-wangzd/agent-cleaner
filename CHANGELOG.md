@@ -3,6 +3,16 @@
 所有重要变更按版本记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 GitHub Release 的正文由 `scripts/release_notes.py` 从本文件按版本提取，无需跳转查看。
 
+## v1.2.0 - 2026-08-18
+
+### 新增
+- 支持 ZCode（智谱 Z.ai）：会话（`~/.zcode/cli/db/db.sqlite`，SQLite）与终端输出缓存
+  （`~/.zcode/cli/exec`，官方确认可整删），Agent 总数 16 → 17。
+- ZCode 会话删除走通用 SQLite 逻辑，同步清理 model_usage / tool_usage 关联数据。
+
+### 测试
+- 新增 ZCode 扫描（含防御式列探测）、环境变量覆盖、SQLite 关联删除的单元测试。
+
 ## v1.1.0 - 2026-08-14
 
 ### 新增

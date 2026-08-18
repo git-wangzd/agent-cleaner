@@ -14,7 +14,7 @@ Built with pure Python standard library + Tkinter, zero third-party dependencies
 ## ✨ Features
 
 - 🖥️ Cross-platform desktop app (Windows / macOS / Linux)
-- 🤖 Supports **16 mainstream AI agents** (see below)
+- 🤖 Supports **17 mainstream AI agents** (see below)
 - 🗑️ Deletion goes to recycle bin by default (recoverable); permanent deletion requires double confirmation
 - 🧹 Sessions and auxiliary data (cache/logs) cleaned separately; auxiliary data unchecked by default
 - ⏱️ Time filter: show only sessions inactive for 7 / 30 / 90+ days
@@ -69,6 +69,7 @@ python main.py --clean 30 --quiet            # quiet mode, no progress output
 | Pi | `%USERPROFILE%\.pi\agent\sessions` |
 | AtomCode | `%USERPROFILE%\.atomcode\sessions` |
 | MimoCode | `%USERPROFILE%\.local\share\mimocode` (SQLite) |
+| ZCode | `%USERPROFILE%\.zcode\cli\db\db.sqlite` (SQLite) + `cli\exec` cache |
 
 ## 📖 Usage Guide
 
@@ -92,7 +93,7 @@ python main.py --clean 30 --quiet            # quiet mode, no progress output
 
 - Deletion goes to the recycle bin by default (recoverable); permanent deletion requires double confirmation
 - Auxiliary data (cache/logs) is unchecked by default
-- Cleaning OpenCode / MimoCode sessions manipulates their SQLite databases — quit the corresponding agent first
+- Cleaning OpenCode / MimoCode / ZCode sessions manipulates their SQLite databases — quit the corresponding agent first
 - Directories that may contain user data (`downloads` / `backups` / memory files) are **never** listed
 
 ## ❓ FAQ
@@ -128,7 +129,7 @@ python smoke_test.py                    # GUI smoke test
 
 ### v1.0.0 (2026-08-13)
 
-- 16 agents supported (Claude Code / Codex / Cursor / OpenCode / Qwen / AtomCode / MimoCode, etc.)
+- 17 agents supported (Claude Code / Codex / Cursor / OpenCode / Qwen / AtomCode / MimoCode, etc.)
 - Sessions & auxiliary data cleaned separately; time/project filters, search, one-click cleanup, invert selection
 - Custom path config (env vars + settings UI), session details, right-click open path
 - Background-thread scanning/cleaning, real-time progress, error logging, update check

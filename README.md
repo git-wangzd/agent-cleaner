@@ -14,7 +14,7 @@
 ## ✨ 特性
 
 - 🖥️ 跨平台桌面程序（Windows / macOS / Linux）
-- 🤖 支持 **16 个主流 AI Agent**（见下表）
+- 🤖 支持 **17 个主流 AI Agent**（见下表）
 - 🗑️ 默认删除进回收站（可恢复）；永久删除需双重确认
 - 🧹 会话与附属数据（缓存/日志）分组清理，附属数据默认不勾选
 - ⏱️ 时间筛选：只看超过 7 / 30 / 90 天未活动的旧会话
@@ -69,6 +69,7 @@ python main.py --clean 30 --quiet            # 静默模式，不打印过程信
 | Pi | `%USERPROFILE%\.pi\agent\sessions` |
 | AtomCode | `%USERPROFILE%\.atomcode\sessions` |
 | MimoCode | `%USERPROFILE%\.local\share\mimocode`（SQLite） |
+| ZCode | `%USERPROFILE%\.zcode\cli\db\db.sqlite`（SQLite）+ `cli\exec` 缓存 |
 
 ## 📖 使用指南
 
@@ -92,7 +93,7 @@ python main.py --clean 30 --quiet            # 静默模式，不打印过程信
 
 - 默认删除进回收站，可恢复；永久删除有双重确认
 - 附属数据（缓存/日志）默认不勾选
-- 清理 OpenCode / MimoCode 会话会操作其 SQLite 数据库，请先退出对应 Agent
+- 清理 OpenCode / MimoCode / ZCode 会话会操作其 SQLite 数据库，请先退出对应 Agent
 - `downloads` / `backups` / 记忆文件等可能含用户数据的目录**不会被列入**
 
 ## ❓ 常见问题（FAQ）
@@ -128,7 +129,7 @@ python smoke_test.py                    # GUI 冒烟测试
 
 ### v1.0.0（2026-08-13）
 
-- 支持 16 个 Agent（含 Claude Code / Codex / Cursor / OpenCode / Qwen / AtomCode / MimoCode 等）
+- 支持 17 个 Agent（含 Claude Code / Codex / Cursor / OpenCode / Qwen / AtomCode / MimoCode 等）
 - 会话与附属数据分组清理、时间/项目筛选、搜索、一键清理、反选
 - 自定义路径配置（环境变量 + 设置界面）、会话详情、右键打开路径
 - 后台线程扫描/清理、实时进度、错误日志、更新检查
