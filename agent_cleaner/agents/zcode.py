@@ -98,7 +98,10 @@ class ZCodeAgent(Agent):
                 sid, directory = row[0], row[1]
                 title = row[2] if title_col else None
                 ts = row[3] if time_col else None
-                ts = float(ts or 0)
+                try:
+                    ts = float(ts or 0)
+                except (TypeError, ValueError):
+                    ts = 0  # TEXT 时间列（版本差异）回退 0，不崩溃
                 if ts > 1e12:  # 毫秒转秒
                     ts /= 1000.0
                 project = Path(directory).name if directory else ""

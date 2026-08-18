@@ -689,6 +689,24 @@ class ZCodeScanTest(BasePatchTest):
         con.close()
         self.assertEqual(ZCodeAgent().scan(), [])
 
+    def test_text_timestamp_no_crash(self):
+        # TEXT 格式时间列（版本差异）不应使扫描崩溃，modified 回退 0
+        db = self.tmp / ".zcode" / "cli" / "db" / "db.sqlite"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        con = sqlite3.connect(str(db))
+        con.executescript(
+            """
+            CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT NOT NULL,
+                                  title TEXT, updated_at TEXT);
+            INSERT INTO session VALUES ('sess-3', '/repo/text', '标题', '2026-08-18T12:00:00');
+            """
+        )
+        con.commit()
+        con.close()
+        sessions = ZCodeAgent().scan()
+        self.assertEqual(len(sessions), 1)
+        self.assertEqual(sessions[0].modified, 0)
+
     def test_env_var_override(self):
         os.environ["ZCODE_STORAGE_DIR"] = str(self.tmp / "zdata")
         agent = ZCodeAgent()
